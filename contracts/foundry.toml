@@ -1,0 +1,30 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.34"
+# Pinned (K-16): the executed code needs PUSH0 (Shanghai) + TLOAD/TSTORE/MCOPY (Cancun, transient reentrancy
+# guards) and no Prague/Osaka opcode. Confirm the target chain supports Cancun (testnet deploy) before mainnet.
+evm_version = "cancun"
+optimizer = true
+# Size-bound calibration (K-28): 100 runs keeps every src contract under EIP-170 with real margin
+# (at 200 runs the upgrade fixture exceeded it once the exact-delivery check landed). Gas delta is
+# a few percent on hot paths; correctness identical. Revisit if a gas-sensitive surface appears.
+optimizer_runs = 100
+via_ir = false
+ffi = true
+ast = true
+build_info = true
+extra_output = ["storageLayout"]
+fs_permissions = [{access = "read", path = "./"}, {access = "read-write", path = "./out"}, {access = "read-write", path = "../shared"}]
+
+[rpc_endpoints]
+rhc = "https://rpc.mainnet.chain.robinhood.com"
+local = "http://127.0.0.1:8547"
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = false
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

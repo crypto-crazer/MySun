@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  FOUNDRY_PROFILE: default
+
+jobs:
+  build-and-test:
+    name: Build + unit/integration tests (no fork)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.3
+
+      - name: Format check
+        run: forge fmt --check
+
+      - name: Build (with sizes)
+        run: forge build --sizes
+
+      - name: Clean build info (OZ upgrades plugin requirement)
+        run: forge clean
+
+      - name: Warm the npx cache for the OZ upgrades plugin
+        # The plugin shells out to `npx @openzeppelin/upgrades-core@<UPGRADES_CORE> validate`.
+        # Warming it once, serially, keeps the first parallel test-time invocations from racing
+        # to populate the same npx cache directory (that race surfaces as
+        # ERR_INVALID_PACKAGE_CONFIG inside a test's upgrade-safety validation).
+        run: |
+          spec=$(sed -n 's/.*UPGRADES_CORE = "\(.*\)".*/\1/p' lib/openzeppelin-foundry-upgrades/src/internal/Versions.sol)
+          echo "warming npx cache: @openzeppelin/upgrades-core@$spec"
+          npx --yes "@openzeppelin/upgrades-core@$spec" >/dev/null
+
+      - name: Run non-fork tests
+        run: |
+          forge build
+          forge test --no-match-path 'test/fork/*' -vv
+
+  slither:
+    name: Slither static analysis
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.3
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install slither
+        # Pinned to the audited baseline: the package's documented slither results
+        # (contracts/audit/slither-current.txt) were produced with 0.11.4. Newer releases add detectors
+        # — 0.11.5+ introduces `reentrancy-balance` (High), which flags the v4 swap's delta accounting
+        # (`outBefore` → Permit2 approve → execute → `balanceOf − outBefore ≥ minOut`); reviewed and
+        # triaged benign (the delta can only grow; no path lets a reentrant actor reduce the adapter's
+        # tokenOut balance). Bumping this pin is a deliberate change, not silent drift.
+        run: pip install slither-analyzer==0.11.4
+
+      - name: Build
+        run: forge build
+
+      - name: Run slither
+        run: slither . --config-file slither.config.json
+
+  aderyn:
+    name: Aderyn static analysis
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.3
+
+      - name: Install aderyn
+        run: |
+          curl -sL -o aderyn.tar.xz https://github.com/Cyfrin/aderyn/releases/download/aderyn-v0.6.8/aderyn-x86_64-unknown-linux-gnu.tar.xz
+          curl -sL -o aderyn.sha256 https://github.com/Cyfrin/aderyn/releases/download/aderyn-v0.6.8/aderyn-x86_64-unknown-linux-gnu.tar.xz.sha256
+          echo "$(awk '{print $1}' aderyn.sha256)  aderyn.tar.xz" | sha256sum -c -
+          tar xf aderyn.tar.xz
+          sudo mv aderyn-x86_64-unknown-linux-gnu/aderyn /usr/local/bin/
+
+      - name: Build
+        run: forge build
+
+      - name: Run aderyn
+        run: aderyn --output aderyn-report.md
+
+      - name: Upload aderyn report
+        uses: actions/upload-artifact@v4
+        with:
+          name: aderyn-report
+          path: contracts/aderyn-report.md

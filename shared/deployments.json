@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "chains": {
+    "4663": {
+      "name": "Robinhood Chain",
+      "rpcUrl": "https://rpc.mainnet.chain.robinhood.com",
+      "testnet": false,
+      "status": "deployed",
+      "explorerUrl": "https://robinhoodchain.blockscout.com",
+      "vaults": [
+        {
+          "key": "main",
+          "label": "USDG / WETH basket (Robinhood Chain)",
+          "receipt": { "name": "sunEthLP", "symbol": "sunEthLP" },
+          "vault": "0x6767257AAFfCE82f6ba4B6E96EDBa80e9e1112FC",
+          "implementation": "0xfa82F1bD5c61842D7c9548DA250837b7062A0C38",
+          "keeper": "0x27447D6F3eCAA5f0c6b89a5b3D2FA03ff3392eaa"
+        }
+      ],
+      "periphery": {
+        "zapIn": "0x8187691738907dCCBB34f6Aa82059CCF1Ae3870f",
+        "zapOut": "0xd9151216e2Ab52b446aAb0207Ab34652b44D228C",
+        "planExecutor": "0xbE744F7685bd7fa6365B6519CE66DeDa71873139"
+      }
+    },
+    "46630": {
+      "name": "Localhost",
+      "rpcUrl": "http://127.0.0.1:8547",
+      "testnet": true,
+      "status": "deployed"
+    }
+  }
+}
