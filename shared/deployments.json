@@ -21,13 +21,13 @@
     },
     {
      "key": "pons",
-     "label": "PONS / USDG basket (Robinhood Chain — v4 FablesRamp)",
+     "label": "PONS / USDG basket (Robinhood Chain)",
      "receipt": {
       "name": "sunPonsLP",
       "symbol": "sunPonsLP"
      },
      "vault": "0x0621252C87307Ed4F07a644F1Ad3a7bb7340c35f",
-     "implementation": "0x5af750fdf74e92fdfd4bcf24e8a576db0a8b5446",
+     "implementation": "0x8bd16efce86b7bacd2c3d3184f6e10e0ad1c6f60",
      "keeper": "0x27447D6F3eCAA5f0c6b89a5b3D2FA03ff3392eaa"
     }
    ],

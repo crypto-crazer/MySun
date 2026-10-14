@@ -65,7 +65,7 @@ describe('app renders without a wallet', () => {
 
   it('live vault page renders and shows no invented numbers', async () => {
     renderAt('/live');
-    expect(await screen.findByText(/in-kind basket vault/i)).toBeDefined();
+    expect(await screen.findByText(/Deposit the basket tokens in kind/i)).toBeDefined();
     // Nothing on this page may claim an APR or a USD value — the chain cannot provide either.
     await waitFor(() => expect(screen.queryByText(/APR/)).toBeNull());
     expect(screen.queryByText(/\$\d/)).toBeNull();

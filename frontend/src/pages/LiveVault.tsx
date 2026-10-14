@@ -69,10 +69,9 @@ export function LiveVault() {
       </header>
 
       <p className="text-sm text-weak max-w-3xl leading-relaxed">
-        An in-kind basket vault: you deposit the basket tokens themselves and receive{' '}
+        Deposit the basket tokens in kind and receive{' '}
         <span className="num">{receipt.symbol}</span>
-        {receipt.name !== receipt.symbol && <> ({receipt.name})</>}, a fungible pro-rata claim on the whole basket. There is no USD
-        valuation, no NAV and no oracle anywhere in this contract — every figure below is a token amount read from the chain.
+        {receipt.name !== receipt.symbol && <> ({receipt.name})</>}, a pro-rata claim on the whole basket.
       </p>
 
       {vault.hasDeployment && <VaultPicker chainId={vault.chainId} selectedKey={vault.entry?.key} />}

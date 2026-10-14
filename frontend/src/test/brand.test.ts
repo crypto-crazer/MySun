@@ -40,6 +40,7 @@ describe('receipt naming — sun<Strategy>LP', () => {
     };
     expect(registry.chains['4663'].vaults.map((v) => [v.key, v.receipt])).toEqual([
       ['main', { name: 'sunEthLP', symbol: 'sunEthLP' }],
+      ['pons', { name: 'sunPonsLP', symbol: 'sunPonsLP' }],
     ]);
   });
 });

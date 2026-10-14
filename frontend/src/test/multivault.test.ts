@@ -18,7 +18,12 @@ const LOCAL = JSON.parse(shared('deployment.local.json')) as {
   chainId: number;
   vaults: { key: string; vault: string; receipt: { name: string; symbol: string } }[];
 };
-/** The mainnet (4663) registry vault — deployment.local.json has no say here. */
+/** The mainnet (4663) registry vaults — deployment.local.json has no say here. */
+const MAIN_KEYS = (
+  JSON.parse(shared('deployments.json')) as {
+    chains: Record<string, { vaults: { key: string; vault: string; receipt: { name: string; symbol: string } }[] }>;
+  }
+).chains['4663'].vaults.map((v) => v.key);
 const MAIN = (
   JSON.parse(shared('deployments.json')) as {
     chains: Record<string, { vaults: { key: string; vault: string; receipt: { name: string; symbol: string } }[] }>;
@@ -284,7 +289,7 @@ describe('generated helpers — vaultsForChain / defaultVault / findVault', () =
   it('vaultsForChain: the local file’s vaults in order; the mainnet list; [] for unknown chains', () => {
     expect(vaultsForChain(localId).map((v) => v.key)).toEqual(LOCAL.vaults.map((v) => v.key));
     expect(vaultsForChain(localId).map((v) => v.receipt)).toEqual(LOCAL.vaults.map((v) => v.receipt));
-    expect(vaultsForChain(4663).map((v) => v.key)).toEqual([MAIN.key]); // the mainnet deployment
+    expect(vaultsForChain(4663).map((v) => v.key)).toEqual(MAIN_KEYS); // the mainnet deployment
     expect(vaultsForChain(1)).toEqual([]);
     expect(vaultsForChain(undefined)).toEqual([]);
   });

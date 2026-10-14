@@ -48,9 +48,9 @@ const LOCAL = JSON.parse(shared('deployment.local.json')) as {
 /** The local chain's default vault: the first one deployment.local.json lists. */
 const LOCAL_VAULT = LOCAL.vaults[0].vault;
 /** The mainnet (4663) registry vault — deployment.local.json does not cover it. */
-const MAIN = (JSON.parse(shared('deployments.json')) as { chains: Record<string, { vaults: LocalVault[] }> }).chains['4663']
-  .vaults[0];
-const MAIN_VAULT = MAIN.vault;
+const MAIN_VAULTS = (JSON.parse(shared('deployments.json')) as { chains: Record<string, { vaults: LocalVault[] }> }).chains['4663']
+  .vaults;
+const MAIN_VAULT = MAIN_VAULTS[0].vault;
 
 const A = (n: number) => `0x${n.toString(16).padStart(40, '0')}`;
 const VAULT = {
@@ -124,7 +124,7 @@ describe('chains.ts — registry-driven helpers', () => {
   it('deploymentForChain: vaults for deployed chains only', () => {
     expect(deploymentForChain(46630)?.vaults.map((v) => v.vault)).toEqual(LOCAL.vaults.map((v) => v.vault));
     expect(deploymentForChain(46630)?.status).toBe('deployed');
-    expect(deploymentForChain(4663)?.vaults.map((v) => v.vault)).toEqual([MAIN_VAULT]); // the mainnet deployment
+    expect(deploymentForChain(4663)?.vaults.map((v) => v.vault)).toEqual(MAIN_VAULTS.map((v) => v.vault)); // the mainnet deployment
     expect(deploymentForChain(1)).toBeUndefined(); // unknown chain
     expect(deploymentForChain(undefined)).toBeUndefined();
     expect(hasDeployment(46630)).toBe(true);
