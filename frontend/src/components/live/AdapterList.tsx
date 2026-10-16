@@ -32,7 +32,7 @@ export function AdapterList({ adapters, tokens }: { adapters: AdapterReport[]; t
             <div key={a.address} className="rounded-md border border-stroke-weak bg-fill-recessed p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="display text-sm font-semibold text-strong truncate">{dexLabel(a.dex)}</span>
+                  <span className="display text-sm text-strong truncate">{dexLabel(a.dex)}</span>
                   <Pill>{poolIdLabel(a.poolId)}</Pill>
                 </div>
                 <a

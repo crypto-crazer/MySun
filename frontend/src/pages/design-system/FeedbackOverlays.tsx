@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
-import { InfoDot, Tooltip } from '@/components/ui/Tooltip';
+import { Hint, Tooltip } from '@/components/ui/Tooltip';
 import { useStore, type Toast } from '@/store/useStore';
 import { Code, PropsTable, Section, Specimen, SubSection } from './parts';
 
@@ -34,10 +34,10 @@ function TooltipSection() {
           <Tooltip content="A wide tooltip holds a sentence or two and wraps at a fixed measure, so a longer explanation stays readable." wide><Button size="sm" variant="secondary">wide</Button></Tooltip>
         </Specimen>
       </SubSection>
-      <SubSection title="Info dot" note="A small mark beside a label that has more to say.">
-        <Specimen code='<InfoDot tip="…" />'>
-          <span className="flex items-center gap-1.5 text-sm text-weak">Trading fees <InfoDot tip="The 7-day average, annualised." /></span>
-          <span className="flex items-center gap-1.5 text-sm text-weak">PMG rewards <InfoDot wide tip="Rewards are paid in PMG on top of trading fees. They can be claimed now or locked." /></span>
+      <SubSection title="Hint" note={<>A term with more to say carries a dashed underline, not an icon. A label that is already a button (a sort header) takes <Code>HINT_UNDERLINE</Code> and sits inside a Tooltip instead.</>}>
+        <Specimen code='<Hint tip="…">Trading fees</Hint>'>
+          <span className="text-sm text-weak"><Hint tip="The 7-day average, annualised.">Trading fees</Hint></span>
+          <span className="text-sm text-weak"><Hint wide tip="The whole pool's trading volume over 24 hours, not this vault's share.">1D Vol</Hint></span>
         </Specimen>
       </SubSection>
       <SubSection title="Props">
@@ -56,7 +56,6 @@ function TooltipSection() {
 
 const TOASTS: Array<{ label: string; toast: Omit<Toast, 'id'> }> = [
   { label: 'success', toast: { title: 'Deposit confirmed', detail: '1,250 USDG into ETH / USDG', tone: 'success' } },
-  { label: 'accent', toast: { title: 'Claim confirmed', detail: '18.3 PMG sent to your wallet', tone: 'accent' } },
   { label: 'warning', toast: { title: 'Demo reset', detail: 'Wallet disconnected. Positions restored to defaults.', tone: 'warning' } },
   { label: 'default', toast: { title: 'Address copied' } },
 ];
@@ -82,7 +81,7 @@ function ToastSection() {
           rows={[
             { name: 'title', type: 'string', note: 'What happened, as a fact: "Deposit confirmed".' },
             { name: 'detail', type: 'string', note: 'The amount and where it went.' },
-            { name: 'tone', type: "'default' | 'accent' | 'success' | 'warning'", def: "'default'", note: 'Accent for rewards. There is no error tone: a failure stays beside the action that failed.' },
+            { name: 'tone', type: "'default' | 'accent' | 'success' | 'warning'", def: "'default'", note: 'No toast uses accent today. There is no error tone: a failure stays beside the action that failed.' },
           ]}
         />
       </SubSection>

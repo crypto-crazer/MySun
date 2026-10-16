@@ -35,10 +35,10 @@ function glowTexture(): CanvasTexture {
   c.width = c.height = 256;
   const g = c.getContext('2d')!;
   const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
-  grd.addColorStop(0, 'rgba(255,226,170,0.9)');
-  grd.addColorStop(0.2, 'rgba(255,180,100,0.45)');
-  grd.addColorStop(0.5, 'rgba(255,140,80,0.12)');
-  grd.addColorStop(1, 'rgba(255,120,70,0)');
+  grd.addColorStop(0, 'rgba(253,232,196,0.9)');
+  grd.addColorStop(0.2, 'rgba(248,199,146,0.45)');
+  grd.addColorStop(0.5, 'rgba(237,169,133,0.12)');
+  grd.addColorStop(1, 'rgba(237,160,130,0)');
   g.fillStyle = grd;
   g.fillRect(0, 0, 256, 256);
   const t = new CanvasTexture(c);
@@ -152,7 +152,7 @@ export function createDuskScene(host: HTMLElement, opts: { offset?: number } = {
   renderer.shadowMap.type = PCFShadowMap;
 
   const scene = new Scene();
-  const horizon = new Color('#94574f');
+  const horizon = new Color('#8f5f66');
   scene.fog = new Fog(horizon, 40, 230);
 
   const camera = new PerspectiveCamera(32, 16 / 9, 0.1, 900);
@@ -162,10 +162,10 @@ export function createDuskScene(host: HTMLElement, opts: { offset?: number } = {
 
   // ---------- Sky ----------
   const skyUniforms = {
-    cTop: { value: new Color('#120a0e') },
-    cMid: { value: new Color('#3f2430') },
+    cTop: { value: new Color('#17121a') },
+    cMid: { value: new Color('#44303f') },
     cLow: { value: horizon.clone() },
-    cGlow: { value: new Color('#f59a5e') },
+    cGlow: { value: new Color('#eda985') },
     glowDir: { value: new Vector3(0, 0.02, -1).normalize() },
   };
   scene.add(new Mesh(
@@ -204,20 +204,20 @@ export function createDuskScene(host: HTMLElement, opts: { offset?: number } = {
     gp.setY(i, far * (3.2 * Math.sin(x * 0.032 + z * 0.015) + 1.6 * Math.sin(x * 0.081 - z * 0.052) + 0.6 * Math.sin(x * 0.19 + z * 0.13)) - 0.02);
   }
   groundGeo.computeVertexNormals();
-  const ground = new Mesh(groundGeo, new MeshStandardMaterial({ color: '#86544a', roughness: 1 }));
+  const ground = new Mesh(groundGeo, new MeshStandardMaterial({ color: '#765a68', roughness: 1 }));
   ground.receiveShadow = true;
   scene.add(ground);
 
   // ---------- Plaza and graduated scale ----------
-  const stone = new MeshStandardMaterial({ color: '#b99a88', roughness: 0.95 });
+  const stone = new MeshStandardMaterial({ color: '#b39d9c', roughness: 0.95 });
   const limestone = limestoneTextures(Math.min(4, renderer.capabilities.getMaxAnisotropy()));
   const postGeometry = monolithGeometry();
   const monolith = new MeshStandardMaterial({
     // Restore the mean reflectance absorbed by the color map, preserving the dusk palette.
-    color: new Color('#e4cdb8').multiplyScalar(255 / 200),
+    color: new Color('#e8d6ca').multiplyScalar(255 / 200),
     map: limestone.color, bumpMap: limestone.bump, bumpScale: 0.018, roughness: 0.95,
   });
-  const engraving = new MeshStandardMaterial({ color: '#4a2f2b', roughness: 1 });
+  const engraving = new MeshStandardMaterial({ color: '#3e2d3b', roughness: 1 });
 
   const plaza = new Mesh(new BoxGeometry(120, BASE, 90), stone);
   plaza.position.set(0, BASE / 2, -20);
@@ -230,7 +230,7 @@ export function createDuskScene(host: HTMLElement, opts: { offset?: number } = {
   const jx: number[] = [], jz: number[] = [];
   for (let z = -60; z <= 22; z += 3.5) jx.push(z);
   for (let x = -56; x <= 56; x += 3.5) jz.push(x);
-  const joints = new InstancedMesh(new BoxGeometry(1, 0.01, 1), new MeshStandardMaterial({ color: '#a3836f', roughness: 1 }), jx.length + jz.length);
+  const joints = new InstancedMesh(new BoxGeometry(1, 0.01, 1), new MeshStandardMaterial({ color: '#9c8487', roughness: 1 }), jx.length + jz.length);
   let ji = 0;
   for (const z of jx) { sc.set(112, 1, 0.03); ps.set(0, BASE + 0.003, z); joints.setMatrixAt(ji++, m4.compose(ps, q, sc)); }
   for (const x of jz) { sc.set(0.03, 1, 82); ps.set(x, BASE + 0.003, -19); joints.setMatrixAt(ji++, m4.compose(ps, q, sc)); }
@@ -256,7 +256,7 @@ export function createDuskScene(host: HTMLElement, opts: { offset?: number } = {
   // The band of the scale that is inside the range
   const band = new Mesh(
     new PlaneGeometry(RANGE_R * 2, 1.1),
-    new MeshBasicMaterial({ color: new Color('#ffb14f'), transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false }),
+    new MeshBasicMaterial({ color: new Color('#fbc97e'), transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false }),
   );
   band.rotation.x = -Math.PI / 2;
   band.position.set(0, BASE + 0.012, SCALE_Z);
@@ -264,9 +264,9 @@ export function createDuskScene(host: HTMLElement, opts: { offset?: number } = {
 
   // Price needle on the scale: the only round-headed thing on the ground
   const needle = new Group();
-  const needleHead = new Mesh(new CylinderGeometry(0.26, 0.26, 0.03, 40), new MeshBasicMaterial({ color: new Color('#ffe3a3'), toneMapped: false }));
+  const needleHead = new Mesh(new CylinderGeometry(0.26, 0.26, 0.03, 40), new MeshBasicMaterial({ color: new Color('#fde4b6'), toneMapped: false }));
   needleHead.position.z = 1.1;
-  needle.add(new Mesh(new BoxGeometry(0.08, 0.02, 1.9), new MeshBasicMaterial({ color: new Color('#ffd28a'), toneMapped: false })), needleHead);
+  needle.add(new Mesh(new BoxGeometry(0.08, 0.02, 1.9), new MeshBasicMaterial({ color: new Color('#fcd69a'), toneMapped: false })), needleHead);
   needle.position.set(0, BASE + 0.02, SCALE_Z);
   scene.add(needle);
 
@@ -302,7 +302,7 @@ export function createDuskScene(host: HTMLElement, opts: { offset?: number } = {
   const sun = new Mesh(new CircleGeometry(1, 96), new ShaderMaterial({
     toneMapped: false,
     fog: false,
-    uniforms: { core: { value: new Color('#fff0cc') }, rim: { value: new Color('#ff9a4a') } },
+    uniforms: { core: { value: new Color('#fff8ec') }, rim: { value: new Color('#fbc97e') } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: [
       'uniform vec3 core; uniform vec3 rim; varying vec2 vUv;',
@@ -315,7 +315,7 @@ export function createDuskScene(host: HTMLElement, opts: { offset?: number } = {
   const glowTex = glowTexture();
   const glowSprite = (opacity: number) => {
     const s = new Sprite(new SpriteMaterial({
-      map: glowTex, color: new Color('#ffb070'), transparent: true, opacity,
+      map: glowTex, color: new Color('#f8c792'), transparent: true, opacity,
       blending: AdditiveBlending, depthWrite: false, toneMapped: false, fog: false,
     }));
     scene.add(s);
@@ -324,15 +324,15 @@ export function createDuskScene(host: HTMLElement, opts: { offset?: number } = {
   const glowNear = glowSprite(0.75), glowFar = glowSprite(0.3);
 
   // Low sun: long shadows of the stones across the plaza
-  const sunLight = new DirectionalLight('#ffb07a', 1.7 * LIGHT);
+  const sunLight = new DirectionalLight('#f8c08e', 1.7 * LIGHT);
   sunLight.castShadow = true;
   sunLight.shadow.mapSize.set(2048, 2048);
   sunLight.shadow.bias = -0.0008;
   const shadowCam = sunLight.shadow.camera;
   shadowCam.left = -34; shadowCam.right = 34; shadowCam.top = 34; shadowCam.bottom = -34; shadowCam.near = 1; shadowCam.far = 140;
   scene.add(sunLight, sunLight.target);
-  scene.add(new HemisphereLight('#b98a92', '#2a161a', 0.85 * LIGHT));
-  const fill = new DirectionalLight('#f0cdbd', 0.55 * LIGHT);
+  scene.add(new HemisphereLight('#a88aa0', '#221a24', 0.85 * LIGHT));
+  const fill = new DirectionalLight('#e6cfcc', 0.55 * LIGHT);
   fill.position.set(-12, 10, 22);
   scene.add(fill);
 

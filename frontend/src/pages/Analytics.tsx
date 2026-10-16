@@ -4,6 +4,7 @@ import { PROTOCOL } from '@/demo/data/protocol';
 import { VAULTS } from '@/demo/data/vaults';
 import * as m from '@/demo/math';
 import { emissionsSeries, hashSeed, mulberry32 } from '@/demo/series';
+import { BRAND } from '@/lib/brand';
 import { cx, fmtPct, fmtPctSigned, fmtUsd } from '@/lib/format';
 import { Segmented } from '@/components/ui/Tabs';
 import { Stat, StatRow } from '@/components/ui/Stat';
@@ -68,10 +69,10 @@ export function Analytics() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
-              <h1 className="display text-2xl font-semibold">Protocol analytics</h1>
+              <h1 className="display text-2xl">Protocol analytics</h1>
               <DemoBadge />
             </div>
-            <p className="text-sm text-weak mt-1">MySun vaults across Ethereum, Robinhood Chain and Arc.</p>
+            <p className="text-sm text-weak mt-1">{BRAND.name} vaults across Ethereum, Robinhood Chain and Arc.</p>
           </div>
           <Segmented<Window> size="sm" value={win} onChange={setWin} options={[{ value: 'week', label: 'This week' }, { value: 'all', label: '8 weeks' }]} />
         </div>
@@ -92,7 +93,7 @@ export function Analytics() {
             />
           ))}
         </div>
-        <p className="text-2xs text-weaker">Revenue is the protocol's 10% share of fees plus zap swap fees. Buybacks are funded from revenue and paid to lockers.</p>
+        <p className="text-2xs text-weaker">Revenue is the protocol's 10% share of fees plus zap swap fees. Buybacks are funded from revenue.</p>
       </section>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -101,10 +102,9 @@ export function Analytics() {
         ))}
       </div>
 
-      <StatRow>
+      <StatRow cols={3}>
         <Stat label="Emissions this week" value={fmtUsd(last.emissionsUsd, { compact: false })} tone="accent" />
         <Stat label="Buyback coverage" value={fmtPct(coverage)} tone={coverage >= 0.6 ? 'default' : 'warning'} />
-        <Stat label="Lock rate" value={fmtPct(PROTOCOL.lockRate, 0)} />
         <Stat label="Market cap" value={fmtUsd(m.circulatingMarketCap(PROTOCOL.circulatingTide))} />
       </StatRow>
     </div>
@@ -129,7 +129,7 @@ function BarCard({ title, data, k, color }: { title: string; data: Week[]; k: Me
   return (
     <section className="bg-background-elevated border border-stroke-weak rounded-lg p-5">
       <div className="flex items-baseline justify-between">
-        <h3 className="display text-md font-semibold">{title}</h3>
+        <h3 className="display text-md">{title}</h3>
         <span className="text-sm text-weak num">{fmtUsd(total)} <span className="text-weaker text-xs">8 weeks</span></span>
       </div>
       <div className="h-40 mt-4">

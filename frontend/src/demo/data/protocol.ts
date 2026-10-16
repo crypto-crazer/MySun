@@ -6,14 +6,7 @@ export const PROTOCOL = {
   weeklyEmissionsUsd: CONSTANTS.WEEKLY_EMISSIONS_TIDE * CONSTANTS.TIDE_PRICE, // $42,000
   lastWeekRevenueUsd: 17_300,
   buybackThisWeekUsd: 8_600,
-  lockRate: 0.58,
   circulatingTide: 74_000_000,
-  redistribution: {
-    fromForfeits: 31_400,
-    fromBuybacks: 16_800,
-  },
-  /** Total PMG currently locked protocol-wide (used to weight redistribution). */
-  totalLockedTide: 9_400_000,
   allocation: [
     { label: 'Community mining', pct: 0.5 },
     { label: 'Team', pct: 0.15 },

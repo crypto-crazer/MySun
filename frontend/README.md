@@ -8,7 +8,7 @@ Two layers, kept visibly apart:
   `shared/deployment.local.json`: basket totals, idle vs in-position split, adapters, receipt-token balance,
   in-kind deposit and redeem. Every number is a chain read; nothing there is invented.
 - **Everything else — the prototype.** The product shell with demo figures (APR, USD, PMG rewards,
-  locks, buybacks), all isolated in `src/demo/` and tagged with a **Demo data** badge in the UI.
+  buybacks), all isolated in `src/demo/` and tagged with a **Demo data** badge in the UI.
 
 This package uses **pnpm** (`packageManager` is pinned in `package.json`); npm is not used anywhere.
 
@@ -200,7 +200,6 @@ demand, so it costs a visitor who connects with a browser extension nothing.
 | Reset demo state | Click the **MySun** wordmark 5 times within 2.5 s |
 | Force US market status | `?market=closed` / `?market=open` / `?market=auto` (persists until changed) |
 | Open the deposit modal on Explore | `/?deposit=tsla-usdc` |
-| Open the claim modal on Explore | `/?claim=1` |
 | Force a theme | `?theme=dark` / `?theme=light` (persists; header toggle does the same) |
 
 State is persisted to `localStorage` under `mysun-demo-v1`.
@@ -217,7 +216,7 @@ State is persisted to `localStorage` under `mysun-demo-v1`.
 | `src/components/ui/DataBadge.tsx` | `Demo data` / `Live on-chain` provenance badges |
 | **`src/demo/`** | **Every invented number**: constants, math, seeded series, vault/protocol/user data |
 | `src/lib/market.ts` | US market clock (America/New_York, weekdays 09:30–16:00 ET, holidays ignored) |
-| `src/store/useStore.ts` | zustand store (persisted) with deposit / withdraw / stake / claim / lock / unlock |
+| `src/store/useStore.ts` | zustand store (persisted) with deposit / withdraw / stake |
 | `src/store/selectors.ts` | Derived hooks shared by Explore, Vault and Rewards |
 | `src/components/deposit/DepositCard.tsx` | The prototype deposit / withdraw card (demo data) |
 | `src/components/vault/PriceRange.tsx` | The range as an instrument: two stones on the bounds, the sun at the price, a graduated price axis (SVG) |
@@ -226,39 +225,38 @@ State is persisted to `localStorage` under `mysun-demo-v1`.
 
 ## Brand
 
-Dusk direction (the product name is set in `src/lib/brand.ts`). Dark only. Tailwind token *names* were
-kept so components did not need to change; the values and a few meanings did (`src/index.css`, `tailwind.config.ts`):
+Dusk direction (the product name is set in `src/lib/brand.ts`). Dark only. The palette is declared once, as
+primitives in `src/lib/tokens.ts`; components reach it only through the semantic tokens (see [Design system](#design-system)):
 
-| Token | Value | Role |
-|---|---|---|
-| `deep` | `#150D10` night | page background, wells inside panels |
-| `dusk` | `#1F1418` | sheets |
-| `panel` / `panel-2` | `#2A1B20` / `#36242A` | cards / hover and selected surfaces |
-| `line` / `line-2` | sand at 12% / 24% | borders |
-| `ink` / `ink-2` / `ink-3` | `#EFE3D1` / `#C4B19D` / `#9C8878` | text, muted, quiet labels |
-| `aqua` | `#EFE3D1` sand | primary actions: there is no second accent colour |
-| `up` / `down` / `amber` | `#92D6A6` / `#FF8A8F` / `#E0B07A` | gain / loss / caution |
-| `sun` / `sun-core` | `#FFAE3D` / `#FFE3A3` | the price. `apricot` and `tide` (PMG) map to the same colour |
-| `glass` | `#B36D5F` rose | decorative |
+| Colour | Primitive | Value | Role |
+|---|---|---|---|
+| Night | `plum-950` | `#17121A` | the page, wells |
+| Dusk | `plum-900` | `#221A24` | cards, dialogs, the side sheet |
+| Mauve | `plum-700` | `#3A2C38` | menus, popovers, chips |
+| Limestone / Stone / Haze | `sand-1000` / `sand-700` / `sand-500` | `#EDE0D2` / `#C9B4A6` / `#A08CA0` | text, supporting text, quiet labels |
+| Limestone at 12% / 24% on Night | `sand-120` / `sand-240` | `#312B30` / `#4A4346` | hairlines, edges |
+| Sun | `sun-1000` | `#FBC97E` | the price, rewards, the one main action |
+| Gain / Loss / Caution | `green-1000` / `red-1000` / `tan-1000` | `#92D6A6` / `#FF8A8F` / `#BF9470` | outcomes and caution |
+| Lavender | `lavender-1000` | `#8D7087` | a chart series with no meaning of its own, text selection |
 
 One rule shapes the interface: **only the price is round**. The sun, the price mark on a range and price points on a
 chart are circles; ranges, controls, cards and token tiles are square-cut. The radius scale is small all the way up to
 `rounded-full` for that reason; use `rounded-circle` for a real circle.
 
 The motif: two stones mark a range's bounds, the sun marks the price, a graduated scale is the price axis. It appears
-as the mark (`components/brand/Mark.tsx`), the range meter on each vault row (`components/vault/RangeMeter.tsx`), the
+in the range meter on each vault row (`components/vault/RangeMeter.tsx`), the
 price range on the vault page (`components/vault/PriceRange.tsx`) and the scene behind the Earn page. That scene is
 alive (`components/brand/SkyScene.tsx`): the sun drifts and the stones slide to re-centre on it when it leaves the
 gap. It is a three.js scene (`duskScene.ts`) loaded on demand, so three.js stays out of the main bundle; the still
 drawing in `Scene.tsx` shows first and remains when WebGL is unavailable. Readings sit on an engraved rule (`StatRow`).
 
-Type: Geist (UI and numerals, tabular; emphasis at 500) and Geist Mono via Google Fonts; Zodiak (page titles, vault
-names; light, never bold) from the Fontshare CDN. Zodiak's licence does not allow its font files in a public repository,
-so it is loaded by `<link>` in `index.html` and never committed. Every action target is at least 36 px tall (44 px for
+Type: Newsreader (every title, page and UI; light, vault names at regular, never bold), Geist (UI; emphasis at 500) and Geist Mono via Google
+Fonts; Switzer for the figures from the Fontshare CDN. Switzer's licence does not allow its font files in a public
+repository, so it is loaded from the CDN in `src/index.css` and never committed. Every action target is at least 36 px tall (44 px for
 primary CTAs).
 
 ## Design tokens
 
-Tailwind config is the token source: surfaces `deep` / `dusk` / `panel` / `line`, action `aqua`, semantic `up` / `down` /
-`amber`, price and rewards `sun` / `tide`. `font-display` is Geist for numbers and UI titles, `font-serif` (class `title`)
-is Zodiak for page-level titles. Chart libraries that cannot read CSS variables take the same colours from `src/lib/theme.ts`.
+`src/lib/tokens.ts` is the colour source; `tailwind.config.ts` turns it into CSS variables and the semantic utilities
+(`text-*`, `bg-background-*`, `bg-fill-*`, `border-stroke-*`). `font-display` is the sans stack for readings, `font-serif` (classes `title` and
+`display`) is Newsreader for every title. Chart libraries that cannot read CSS variables take the same colours from `src/lib/theme.ts`.

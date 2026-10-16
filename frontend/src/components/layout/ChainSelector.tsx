@@ -11,6 +11,7 @@ import { useSwitchToChain, useTargetChain } from '@/chain/useTargetChain';
 import { Button } from '@/components/ui/Button';
 import { ChainLogo } from '@/components/ui/ChainLogo';
 import { Spinner } from '@/components/ui/Spinner';
+import { BRAND } from '@/lib/brand';
 import { cx } from '@/lib/format';
 import { useStore } from '@/store/useStore';
 
@@ -44,7 +45,7 @@ export function ChainSelector() {
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Network: ${chain.name}`}
-        title={isWrongChain ? 'Your wallet is on another network' : !deployed ? 'No MySun deployment on this network' : chain.name}
+        title={isWrongChain ? 'Your wallet is on another network' : !deployed ? `No ${BRAND.name} deployment on this network` : chain.name}
         className={cx('sm:!px-4', warn && 'btn-glass-warning')}
       >
         {/* flex, not inline-flex, here and on the mark: an inline box sits on the label's text line and ends up above centre */}

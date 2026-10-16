@@ -40,8 +40,12 @@ function pairPrice(token0: string, token1: string): number {
 
 /**
  * The first-phase pairs, all on Robinhood Chain. Prices are real; TVL, APR and range figures are
- * demo figures until the vaults are live.
+ * demo figures until the vaults are live. 24h volume is each pool's 1D volume as listed on the
+ * Robinhood Chain pools page on 2026-10-05.
  */
+/** The day `volume24h` was read, as the Earn table says it. Change it with the figures. */
+export const VOLUME_SNAPSHOT_DATE = 'Oct 5, 2026';
+
 export const VAULTS: Vault[] = [
   {
     id: 'eth-usdg',
@@ -49,8 +53,11 @@ export const VAULTS: Vault[] = [
     token1: 'USDG',
     receiptSymbol: 'sunEthLP',
     chain: 'robinhood',
+    poolVersion: 'v3',
+    poolFee: 100,
     tier: 'Turbo', // trades around the clock, so it never takes the market-closed stance
     tvl: 2_400_000,
+    volume24h: 389_900_000,
     feeApr7d: 0.186,
     emissionWeight: 0.2,
     rangeWidthPct: 0.1,
@@ -68,8 +75,11 @@ export const VAULTS: Vault[] = [
     token1: 'USDG',
     receiptSymbol: 'sunNvdaLP',
     chain: 'robinhood',
+    poolVersion: 'v3',
+    poolFee: 500,
     tier: 'Core',
     tvl: 4_200_000,
+    volume24h: 25_200_000,
     feeApr7d: 0.142,
     emissionWeight: 0.3,
     rangeWidthPct: 0.18,
@@ -87,8 +97,11 @@ export const VAULTS: Vault[] = [
     token1: 'ETH',
     receiptSymbol: 'sunPonsEthLP',
     chain: 'robinhood',
+    poolVersion: 'v3',
+    poolFee: 3000,
     tier: 'Degen',
     tvl: 540_000,
+    volume24h: 5_000_000,
     feeApr7d: 0.31,
     emissionWeight: 0.07,
     rangeWidthPct: 0.08,
@@ -106,8 +119,11 @@ export const VAULTS: Vault[] = [
     token1: 'USDG',
     receiptSymbol: 'sunSpcxLP',
     chain: 'robinhood',
+    poolVersion: 'v3',
+    poolFee: 500,
     tier: 'Core',
     tvl: 1_800_000,
+    volume24h: 21_300_000,
     feeApr7d: 0.195,
     emissionWeight: 0.15,
     rangeWidthPct: 0.2,
@@ -125,8 +141,11 @@ export const VAULTS: Vault[] = [
     token1: 'USDG',
     receiptSymbol: 'sunPonsLP',
     chain: 'robinhood',
+    poolVersion: 'v4',
+    poolFee: 3000,
     tier: 'Degen',
     tvl: 760_000,
+    volume24h: 3_900_000,
     feeApr7d: 0.264,
     emissionWeight: 0.1,
     rangeWidthPct: 0.08,
@@ -144,8 +163,11 @@ export const VAULTS: Vault[] = [
     token1: 'ETH',
     receiptSymbol: 'sunCashcatEthLP',
     chain: 'robinhood',
+    poolVersion: 'v3',
+    poolFee: 3000,
     tier: 'Degen',
     tvl: 410_000,
+    volume24h: 13_300_000,
     feeApr7d: 0.886,
     emissionWeight: 0.05,
     rangeWidthPct: 0.05,
@@ -163,8 +185,11 @@ export const VAULTS: Vault[] = [
     token1: 'ETH',
     receiptSymbol: 'sunSpyEthLP',
     chain: 'robinhood',
+    poolVersion: 'v3',
+    poolFee: 500,
     tier: 'Core',
     tvl: 1_300_000,
+    volume24h: 6_200_000,
     feeApr7d: 0.128,
     emissionWeight: 0.13,
     rangeWidthPct: 0.18,
@@ -182,4 +207,9 @@ export const VAULT_BY_ID: Record<string, Vault> = Object.fromEntries(VAULTS.map(
 
 export function vaultName(v: Vault): string {
   return `${v.token0} / ${v.token1}`;
+}
+
+/** The pool behind the vault, as the DEX lists it: "v3 · 0.05%". */
+export function poolLabel(v: Vault): string {
+  return `${v.poolVersion} · ${v.poolFee / 10_000}%`;
 }

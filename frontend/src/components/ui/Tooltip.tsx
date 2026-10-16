@@ -41,11 +41,18 @@ export function Tooltip({ content, children, side = 'top', align = 'center', cla
   );
 }
 
-export function InfoDot({ tip, wide }: { tip: ReactNode; wide?: boolean }) {
+/** The dashed underline that marks a term as one with more to say. It stands in for an info icon. */
+export const HINT_UNDERLINE = 'underline decoration-stroke-stronger decoration-dashed decoration-1 underline-offset-[3px]';
+
+/** A term that explains itself: underlined, with the explanation on hover or focus. */
+export function Hint({ tip, children, wide, align }: { tip: ReactNode; children: ReactNode; wide?: boolean; align?: Props['align'] }) {
   return (
-    <Tooltip content={tip} wide={wide}>
-      <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-stroke-stronger text-[9px] leading-none text-weaker cursor-help">
-        i
+    <Tooltip content={tip} wide={wide} align={align}>
+      <span
+        tabIndex={0}
+        className={cx(HINT_UNDERLINE, 'cursor-help focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-stroke-focused')}
+      >
+        {children}
       </span>
     </Tooltip>
   );

@@ -38,7 +38,7 @@ export function VaultPicker({ chainId, selectedKey }: { chainId: number; selecte
   return (
     <section aria-label="Vault picker" className="space-y-2">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="display text-sm font-semibold">
+        <h2 className="display text-sm">
           {vaults.length} vaults on {chainShortLabel(chainId)}
         </h2>
         <span className="text-2xs text-weaker">Each vault is its own basket with its own receipt token</span>

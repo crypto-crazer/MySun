@@ -20,16 +20,16 @@ export default {
   theme: {
     colors: tailwindColors(),
     fontFamily: {
-      // `display` is the emphasis face for numbers and UI titles; the serif is for page-level titles.
-      // "Switzer Figures" holds only figures and their signs (src/index.css), so it leads both stacks:
-      // every figure is set in Switzer, every letter in Geist.
+      // The serif (Newsreader, light) sets every title, from the page title down to a card's.
+      // `display` names the emphasis role for readings. "Switzer Figures" holds only figures and their
+      // signs (src/index.css), so it leads both sans stacks: every figure in them is Switzer, every letter Geist.
       display: ['"Switzer Figures"', 'Geist', '"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
       sans: ['"Switzer Figures"', 'Geist', '"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
-      serif: ['Zodiak', '"Iowan Old Style"', '"Palatino Linotype"', 'Georgia', 'serif'],
+      serif: ['Newsreader', '"Iowan Old Style"', '"Palatino Linotype"', 'Georgia', 'serif'],
       mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
     },
-    // Geist carries emphasis at 500; 600 is the ceiling.
-    fontWeight: { thin: '100', light: '300', normal: '400', medium: '500', semibold: '500', bold: '600' },
+    // The serif is set at light (300), and at regular (400) for vault names. Geist carries emphasis at 500; 600 is the ceiling.
+    fontWeight: { light: '300', normal: '400', medium: '500', semibold: '500', bold: '600' },
     borderRadius: { none: '0', sm: '2px', DEFAULT: '3px', md: '3px', lg: '4px', full: '2px', circle: '50%' },
     extend: {
       fontSize: {

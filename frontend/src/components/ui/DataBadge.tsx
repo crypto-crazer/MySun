@@ -1,9 +1,10 @@
+import { BRAND } from '@/lib/brand';
 import { cx } from '@/lib/format';
 import { Tooltip } from './Tooltip';
 
 /**
  * Provenance tags. Every number on screen is one of two things and the UI has to say which:
- *  - <DemoBadge/>  — invented figure from src/demo (no chain can produce it: APR, USD, PMG, locks)
+ *  - <DemoBadge/>  — invented figure from src/demo (no chain can produce it: APR, USD, PMG)
  *  - <LiveBadge/>  — read from the deployed vault over RPC
  * See notes/frontend/INTEGRATION.md (internal) for the full mapping.
  */
@@ -27,7 +28,7 @@ export function DemoBadge({ className, label = 'Demo data' }: { className?: stri
 
 export function LiveBadge({ className, label = 'Live on-chain' }: { className?: string; label?: string }) {
   return (
-    <Tooltip content="Read from the deployed MySun vault over RPC." wide>
+    <Tooltip content={`Read from the deployed ${BRAND.name} vault over RPC.`} wide>
       <span
         className={cx(
           'inline-flex items-center gap-1.5 h-[22px] px-2 rounded border border-stroke-success/35 text-[10.5px] font-medium uppercase tracking-[0.1em] leading-none text-success whitespace-nowrap cursor-help',

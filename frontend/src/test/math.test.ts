@@ -19,10 +19,9 @@ describe('anchors — MOCK-DATA-SPEC §3', () => {
     expect(b.tideApr * 100).toBeCloseTo(18.4, 1);
     expect(b.totalApr * 100).toBeCloseTo(32.6, 1);
   });
-  it('demo user deposits ≈ $12,398 and 36,500 PMG locked', () => {
+  it('demo user deposits ≈ $12,398', () => {
     const u = demoUserState(0);
     expect(m.totalDepositsUsd(u.positions, VAULT_BY_ID)).toBeCloseTo(12_398, 0);
-    expect(m.lockedTide(u.locks)).toBe(38_650);
   });
   it('demo Net PnL = +$412 (+3.4%)', () => {
     const u = demoUserState(0);
@@ -31,13 +30,9 @@ describe('anchors — MOCK-DATA-SPEC §3', () => {
     expect(value - cost).toBeCloseTo(412, 6);
     expect(((value - cost) / cost) * 100).toBeCloseTo(3.4, 1);
   });
-  it('pending 1,224 PMG ≈ $51.4; claim now 612 / lock 1,224', () => {
+  it('pending 1,224 PMG ≈ $51.4', () => {
     const u = demoUserState(0);
     expect(u.pendingTide * CONSTANTS.TIDE_PRICE).toBeCloseTo(51.4, 1);
-    const s = m.claimSplit(u.pendingTide);
-    expect(s.instant).toBe(612);
-    expect(s.locked).toBe(1_224);
-    expect(s.forfeited).toBe(612);
   });
 });
 
@@ -107,9 +102,6 @@ describe('protocol figures — §4', () => {
   it('coverage = 8,600 / 42,000 ≈ 20.5%', () => {
     expect(PROTOCOL.weeklyEmissionsUsd).toBe(42_000);
     expect(m.buybackCoverage(PROTOCOL.buybackThisWeekUsd, PROTOCOL.weeklyEmissionsUsd) * 100).toBeCloseTo(20.5, 1);
-  });
-  it('redistribution sources sum to 48,200', () => {
-    expect(PROTOCOL.redistribution.fromForfeits + PROTOCOL.redistribution.fromBuybacks).toBe(48_200);
   });
   it('circulating market cap ≈ $3.1M', () => {
     expect(m.circulatingMarketCap(PROTOCOL.circulatingTide) / 1e6).toBeCloseTo(3.1, 1);

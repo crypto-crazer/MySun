@@ -23,22 +23,6 @@ export function demoUserState(now = Date.now()): UserState {
     },
     pendingTide: 1_224,
     pendingUpdatedAt: now,
-    locks: [
-      {
-        id: 'lock-demo-1',
-        amount: 36_500,
-        lockedAt: now - 22 * DAY,
-        unlockAt: now + 68 * DAY,
-        redistributionEarned: 38.2,
-      },
-      {
-        id: 'lock-demo-0',
-        amount: 2_150,
-        lockedAt: now - 95 * DAY,
-        unlockAt: now - 5 * DAY, // matured — shows the Unlock state
-        redistributionEarned: 12.6,
-      },
-    ],
     tvlDelta: {},
     degenAcknowledged: false,
     history: [],
@@ -51,7 +35,6 @@ export function emptyUserState(now = Date.now()): UserState {
     positions: {},
     pendingTide: 0,
     pendingUpdatedAt: now,
-    locks: [],
     tvlDelta: {},
     degenAcknowledged: false,
     history: [],

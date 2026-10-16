@@ -134,7 +134,7 @@ function BasketRedeemCard({ vault, user, modeSwitch }: { vault: LiveVault; user:
   return (
     <section className="bg-background-elevated border border-stroke-weak rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="display text-sm font-semibold">Redeem</h3>
+        <h3 className="display text-sm">Redeem</h3>
         <span className="text-2xs text-weaker">Always available · never blocked by a position</span>
       </div>
 
@@ -323,7 +323,7 @@ function ZapRedeemCard({ vault, user, route, modeSwitch }: { vault: LiveVault; u
   return (
     <section className="bg-background-elevated border border-stroke-weak rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="display text-sm font-semibold">Redeem to {token.symbol} only</h3>
+        <h3 className="display text-sm">Redeem to {token.symbol} only</h3>
         <span className="text-2xs text-weaker">Redeems in kind · the zap sells the rest into {token.symbol}</span>
       </div>
 

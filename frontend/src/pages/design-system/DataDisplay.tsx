@@ -93,7 +93,7 @@ function StatSection() {
         <PropsTable
           rows={[
             { name: 'label', type: 'ReactNode', note: 'Set as an eyebrow above the value.' },
-            { name: 'value', type: 'ReactNode', note: 'The reading. A string, or a component such as BoostedApr.' },
+            { name: 'value', type: 'ReactNode', note: 'The reading. A string, or any node.' },
             { name: 'sub', type: 'ReactNode', note: 'A second line: the same amount in another unit.' },
             { name: 'tone', type: "'default' | 'accent' | 'success' | 'error' | 'warning'", def: "'default'", note: 'Accent for reward amounts; the other three for outcomes.' },
             { name: 'size', type: "'md' | 'lg'", def: "'md'", note: 'lg for the one reading a panel is about.' },
@@ -117,7 +117,7 @@ function StatRowSection() {
         <Specimen className="!block">
           <StatRow>
             <Stat label="TVL" value="$2.4M" />
-            <Stat label="APR" value={<BoostedApr value="40.0%" />} />
+            <Stat label="APR" value="18.6%" />
             <Stat label="Fees (24h)" value="$1,204" />
             <Stat label="Capacity" value="80%" />
           </StatRow>
@@ -127,7 +127,7 @@ function StatRowSection() {
         <Specimen className="!block" code="<StatRow cols={3} packed>">
           <StatRow cols={3} packed>
             <Stat label="TVL" value="$2.4M" />
-            <Stat label="APR" value={<BoostedApr value="40.0%" />} />
+            <Stat label="APR" value="18.6%" />
             <Stat label="Capacity" value="$2.4M / 3M" />
           </StatRow>
         </Specimen>
@@ -136,7 +136,7 @@ function StatRowSection() {
         <Specimen className="!block" code="<StatRow cols={2} packed rule={false}>">
           <StatRow cols={2} packed rule={false}>
             <Stat label="Total TVL" value="$11.4M" />
-            <Stat label="Fees earned (24h)" value="$6,278" />
+            <Stat label="All vaults' fees (24h)" value="$6,278" />
           </StatRow>
         </Specimen>
       </SubSection>
@@ -331,6 +331,7 @@ function BoostedAprSection() {
       id="boosted-apr"
       title="Boosted APR"
       source="src/components/ui/BoostedApr.tsx"
+      status={NOT_IN_USE}
       lede="An APR that includes rewards: the number in the text colour, marked with a small spark in the sun colour. The spark scales with the text, so it works at any size."
     >
       <Specimen align="baseline" className="gap-x-10" code='<BoostedApr value="40.0%" />'>

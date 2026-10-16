@@ -1,9 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Lock, TxKind, UserState } from '@/lib/types';
+import type { TxKind, UserState } from '@/lib/types';
 import { demoUserState, emptyUserState } from '@/demo/data/demoUser';
 import { VAULT_BY_ID } from '@/demo/data/vaults';
-import { CONSTANTS } from '@/demo/constants';
 import * as m from '@/demo/math';
 import type { ZapPreview, WithdrawPreview } from '@/demo/math';
 
@@ -27,8 +26,6 @@ interface AppState {
   /** Read-only mode (the no-browser-wallet fallback) is active. */
   readOnlyMode: boolean;
   user: UserState;
-  /** Instant-claim forfeits added to this week's redistribution pool by the demo user. */
-  forfeitsAdded: number;
   marketOverride: MarketOverride;
   theme: Theme;
   toasts: Toast[];
@@ -45,9 +42,6 @@ interface AppState {
   deposit: (args: { vaultId: string; preview: ZapPreview; stake: boolean; spend: Array<{ token: string; amount: number }> }) => void;
   withdraw: (args: { vaultId: string; preview: WithdrawPreview }) => void;
   stakeAll: (vaultId: string) => void;
-  claimInstant: () => number;
-  claimLock: () => Lock | null;
-  unlock: (lockId: string) => void;
   acknowledgeDegen: () => void;
   tickPending: (now: number) => void;
 
@@ -66,7 +60,6 @@ const memoryStorage = (() => {
     removeItem: (k: string) => void map.delete(k),
   };
 })();
-const DAY = 86_400_000;
 
 function record(user: UserState, kind: TxKind, label: string): UserState {
   return { ...user, history: [{ id: uid(), kind, at: Date.now(), label }, ...user.history].slice(0, 50) };
@@ -81,7 +74,6 @@ export const useStore = create<AppState>()(
       address: null,
       readOnlyMode: false,
       user: emptyUserState(),
-      forfeitsAdded: 0,
       marketOverride: 'auto',
       theme: 'light',
       toasts: [],
@@ -116,7 +108,7 @@ export const useStore = create<AppState>()(
       disconnect: () => set({ connected: false, address: null, readOnlyMode: false }),
 
       reset: () =>
-        set({ connected: false, connecting: false, initialized: false, address: null, readOnlyMode: false, user: emptyUserState(), forfeitsAdded: 0, toasts: [] }),
+        set({ connected: false, connecting: false, initialized: false, address: null, readOnlyMode: false, user: emptyUserState(), toasts: [] }),
 
       setMarketOverride: (o) => set({ marketOverride: o }),
       setTheme: (t) => set({ theme: t }),
@@ -185,55 +177,6 @@ export const useStore = create<AppState>()(
           };
         }),
 
-      claimInstant: () => {
-        const s = get();
-        const split = m.claimSplit(s.user.pendingTide);
-        if (split.instant <= 0) return 0;
-        set({
-          forfeitsAdded: s.forfeitsAdded + split.forfeited,
-          user: record(
-            {
-              ...s.user,
-              pendingTide: 0,
-              pendingUpdatedAt: Date.now(),
-              balances: { ...s.user.balances, PMG: (s.user.balances.PMG ?? 0) + split.instant },
-            },
-            'claim',
-            `Claimed ${Math.round(split.instant)} PMG`,
-          ),
-        });
-        return split.instant;
-      },
-
-      claimLock: () => {
-        const s = get();
-        const amount = s.user.pendingTide;
-        if (amount <= 0) return null;
-        const now = Date.now();
-        const lock: Lock = { id: uid(), amount, lockedAt: now, unlockAt: now + CONSTANTS.LOCK_DAYS * DAY, redistributionEarned: 0 };
-        set({
-          user: record({ ...s.user, pendingTide: 0, pendingUpdatedAt: now, locks: [lock, ...s.user.locks] }, 'lock', `Locked ${Math.round(amount)} PMG`),
-        });
-        return lock;
-      },
-
-      unlock: (lockId) =>
-        set((s) => {
-          const l = s.user.locks.find((x) => x.id === lockId);
-          if (!l) return {};
-          return {
-            user: record(
-              {
-                ...s.user,
-                locks: s.user.locks.filter((x) => x.id !== lockId),
-                balances: { ...s.user.balances, PMG: (s.user.balances.PMG ?? 0) + l.amount + l.redistributionEarned },
-              },
-              'unlock',
-              `Unlocked ${Math.round(l.amount)} PMG`,
-            ),
-          };
-        }),
-
       acknowledgeDegen: () => set((s) => ({ user: { ...s.user, degenAcknowledged: true } })),
 
       /** Live accrual: pending PMG grows at the vault's PMG APR. */
@@ -264,7 +207,6 @@ export const useStore = create<AppState>()(
         readOnlyMode: s.readOnlyMode,
         initialized: s.initialized,
         user: s.user,
-        forfeitsAdded: s.forfeitsAdded,
         marketOverride: s.marketOverride,
         theme: s.theme,
       }),

@@ -4,10 +4,9 @@ interface Props {
   checked: boolean;
   onChange: (v: boolean) => void;
   label?: string;
-  tone?: 'primary' | 'accent';
 }
 
-export function Toggle({ checked, onChange, label, tone = 'primary' }: Props) {
+export function Toggle({ checked, onChange, label }: Props) {
   return (
     <button
       type="button"
@@ -17,7 +16,7 @@ export function Toggle({ checked, onChange, label, tone = 'primary' }: Props) {
       onClick={() => onChange(!checked)}
       className={cx(
         'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors duration-150',
-        checked ? (tone === 'accent' ? 'bg-fill-accent border-stroke-accent' : 'bg-fill-primary border-stroke-primary') : 'bg-fill-track border-stroke-strong',
+        checked ? 'bg-fill-primary border-stroke-primary' : 'bg-fill-track border-stroke-strong',
       )}
     >
       <span

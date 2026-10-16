@@ -44,7 +44,7 @@ export function DesignSystem() {
   return (
     <div className="wrap pb-[120px] pt-[52px]">
       <header className="mb-12 grid gap-4">
-        <h1 className="title font-thin text-[clamp(44px,5.4vw,74px)]">Design system</h1>
+        <h1 className="title text-[clamp(44px,5.4vw,74px)]">Design system</h1>
         <p className="max-w-[60ch] text-md text-weak">
           The tokens and base components {BRAND.name} is built from. Every specimen on this page is the component the app renders, not a drawing of it.
         </p>

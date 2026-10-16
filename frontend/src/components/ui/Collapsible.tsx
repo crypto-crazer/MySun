@@ -6,7 +6,7 @@ export function Collapsible({ title, children, defaultOpen = false }: { title: R
   return (
     <div className="bg-background-elevated border border-stroke-weak rounded-md">
       <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between px-4 h-11 text-left" aria-expanded={open}>
-        <span className="display text-sm font-semibold">{title}</span>
+        <span className="display text-sm">{title}</span>
         <svg viewBox="0 0 16 16" className={cx('h-4 w-4 text-weaker transition-transform duration-150', open && 'rotate-180')} fill="none">
           <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>

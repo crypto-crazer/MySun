@@ -3,7 +3,7 @@
  * no component hard-codes a derived number.
  */
 import { CONSTANTS } from './constants';
-import type { Lock, Position, RangeStatus, Vault } from '@/lib/types';
+import type { Position, RangeStatus, Vault } from '@/lib/types';
 import type { MarketStatus } from '@/lib/market';
 
 // ───────────────────────── Emissions & APR ─────────────────────────
@@ -89,14 +89,6 @@ export function totalDepositsUsd(positions: Record<string, Position>, vaults: Re
 
 export function totalCostBasis(positions: Record<string, Position>): number {
   return Object.values(positions).reduce((a, p) => a + p.costBasis, 0);
-}
-
-export function lockedTide(locks: Lock[]): number {
-  return locks.reduce((a, l) => a + l.amount, 0);
-}
-
-export function lockedUsd(locks: Lock[]): number {
-  return lockedTide(locks) * CONSTANTS.TIDE_PRICE;
 }
 
 /** Fees earned so far by a position: value × fee APR × time held. */
@@ -246,33 +238,6 @@ export function withdrawPreview(v: Vault, tdlp: number, mode: WithdrawMode, pric
         ]
       : [{ token: mode, amount: netUsd / prices[mode], usd: netUsd }];
   return { tdlp, grossUsd, feeUsd, netUsd, outputs };
-}
-
-// ───────────────────────── Claims & locks ─────────────────────────
-
-export interface ClaimSplit {
-  instant: number; // pending × 50%
-  forfeited: number; // goes to lockers
-  locked: number; // pending × 100%
-}
-
-export function claimSplit(pending: number): ClaimSplit {
-  const instant = pending * CONSTANTS.INSTANT_CLAIM_RATIO;
-  return { instant, forfeited: pending - instant, locked: pending };
-}
-
-export function lockProgress(l: Lock, now: number): number {
-  const total = l.unlockAt - l.lockedAt;
-  if (total <= 0) return 1;
-  return Math.min(1, Math.max(0, (now - l.lockedAt) / total));
-}
-
-export function lockDaysLeft(l: Lock, now: number): number {
-  return Math.max(0, Math.ceil((l.unlockAt - now) / 86_400_000));
-}
-
-export function isUnlockable(l: Lock, now: number): boolean {
-  return now >= l.unlockAt;
 }
 
 // ───────────────────────── Protocol ─────────────────────────

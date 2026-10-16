@@ -3,6 +3,7 @@ import { useWallet } from '@/wallet/context';
 import { useStore } from '@/store/useStore';
 import { Button } from '@/components/ui/Button';
 import { READ_ONLY_ADDRESS } from '@/demo/constants';
+import { BRAND } from '@/lib/brand';
 import { cx, shortAddress } from '@/lib/format';
 import { TokenIcon } from '@/components/ui/TokenIcon';
 import { NetworkManual } from '@/components/live/NetworkManual';
@@ -70,7 +71,7 @@ export function WalletButton() {
           <div className="text-2xs text-weaker mb-2 num break-all">{shown}</div>
 
           {address ? (
-            <div className="mb-3 rounded border border-stroke-weak bg-background-elevated px-2.5 py-2">
+            <div className="mb-3 rounded border border-stroke-strong bg-background-elevated px-2.5 py-2">
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="text-weaker">Wallet</span>
                 <span className="text-strong">{walletName ?? 'Browser wallet'}</span>
@@ -108,7 +109,7 @@ export function WalletButton() {
 
           {address && <WalletBalances account={address} />}
 
-          <div className="mt-3 pt-2 border-t border-stroke-weak">
+          <div className="mt-3 pt-2 border-t border-stroke-strong">
             <Button variant="secondary" size="sm" block onClick={() => { disconnectAll(); setOpen(false); }}>
               {readOnlyMode && !address ? 'Leave read-only mode' : 'Disconnect'}
             </Button>
@@ -120,6 +121,7 @@ export function WalletButton() {
 }
 
 /**
+ * Shown only in the wallet popover, so its dividers are stroke-strong (stroke-weak does not read on Mauve).
  * Real balances only — every row is a chain read. First the selected vault's basket + receipt, then
  * any other token the app knows on the same chain that the wallet actually holds (non-zero), e.g.
  * a second vault's receipt or its basket tokens. Nothing here is invented: absent data is absent.
@@ -155,7 +157,7 @@ function WalletBalances({ account }: { account: `0x${string}` }) {
       {hasVault && (
         <div>
           <div className="text-2xs text-weaker mb-1 truncate">Live vault balances · {vault.entry?.label}</div>
-          <div className="divide-y divide-stroke-weak text-sm">
+          <div className="divide-y divide-stroke-strong text-sm">
             <div className="flex items-center justify-between py-2">
               <span className="text-weak">{vault.receipt.symbol}</span>
               <span className="num font-medium">{formatAmountSignificant(user.shares, vault.decimals)}</span>
@@ -173,7 +175,7 @@ function WalletBalances({ account }: { account: `0x${string}` }) {
       {extras.length > 0 && (
         <div>
           <div className="text-2xs text-weaker mb-1">Other balances · {chainShortLabel(vault.chainId)}</div>
-          <div className="divide-y divide-stroke-weak text-sm">
+          <div className="divide-y divide-stroke-strong text-sm">
             {extras.map((r) => (
               <div key={r.address} className="flex items-center justify-between py-2">
                 <span className="inline-flex items-center gap-2 text-weak">
@@ -189,7 +191,7 @@ function WalletBalances({ account }: { account: `0x${string}` }) {
 
       {!hasVault && extras.length === 0 && !vault.isLoading && (
         <div className="text-2xs text-weaker">
-          {vault.hasDeployment ? 'Vault not reachable on this network.' : 'No MySun deployment on this network.'}
+          {vault.hasDeployment ? 'Vault not reachable on this network.' : `No ${BRAND.name} deployment on this network.`}
         </div>
       )}
     </div>

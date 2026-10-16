@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useStore } from '@/store/useStore';
 import { VAULT_BY_ID, TOKEN_PRICES } from '@/demo/data/vaults';
-import { PROTOCOL } from '@/demo/data/protocol';
-import { CONSTANTS } from '@/demo/constants';
 import * as m from '@/demo/math';
 
 const nvda = VAULT_BY_ID['nvda-usdg'];
@@ -10,8 +8,7 @@ const nvda = VAULT_BY_ID['nvda-usdg'];
 function derived() {
   const s = useStore.getState();
   const deposits = m.totalDepositsUsd(s.user.positions, VAULT_BY_ID);
-  const locked = m.lockedTide(s.user.locks) * CONSTANTS.TIDE_PRICE;
-  return { s, deposits, locked };
+  return { s, deposits };
 }
 
 describe('store — cross-page consistency after actions (checklist §7)', () => {
@@ -37,29 +34,6 @@ describe('store — cross-page consistency after actions (checklist §7)', () =>
     expect(after.s.user.tvlDelta[nvda.id]).toBeCloseTo(preview.netUsd, 6);
     const br = m.aprBreakdown(nvda, m.effectiveTvl(nvda, after.s.user.tvlDelta));
     expect(br.totalApr).toBeCloseTo(br.feeApr + br.tideApr, 12);
-  });
-
-  it('claim now pays 50%, forfeits 50% into the redistribution pool (sources still sum to pool)', () => {
-    const pending = useStore.getState().user.pendingTide;
-    const got = useStore.getState().claimInstant();
-    const s = useStore.getState();
-    expect(got).toBeCloseTo(pending * 0.5, 9);
-    expect(s.user.pendingTide).toBe(0);
-    expect(s.user.balances.PMG).toBeCloseTo(3_400 + got, 9);
-    expect(s.forfeitsAdded).toBeCloseTo(pending * 0.5, 9);
-    const forfeits = PROTOCOL.redistribution.fromForfeits + s.forfeitsAdded;
-    expect(forfeits + PROTOCOL.redistribution.fromBuybacks).toBeCloseTo(48_200 + pending * 0.5, 9);
-  });
-
-  it('claim & lock locks 100% for 90 days and raises locked value', () => {
-    const pending = useStore.getState().user.pendingTide;
-    const before = derived();
-    const lock = useStore.getState().claimLock();
-    expect(lock?.amount).toBeCloseTo(pending, 9);
-    expect((lock!.unlockAt - lock!.lockedAt) / 86_400_000).toBe(90);
-    const after = derived();
-    expect(after.locked).toBeCloseTo(before.locked + pending * CONSTANTS.TIDE_PRICE, 9);
-    expect(after.s.user.pendingTide).toBe(0);
   });
 
   it('withdraw with staked receipt tokens unstakes and pays out net of the 0.1% fee; full exit removes the position', () => {
@@ -88,6 +62,5 @@ describe('store — cross-page consistency after actions (checklist §7)', () =>
     const s = useStore.getState();
     expect(s.connected).toBe(false);
     expect(Object.keys(s.user.positions)).toHaveLength(0);
-    expect(s.user.locks).toHaveLength(0);
   });
 });

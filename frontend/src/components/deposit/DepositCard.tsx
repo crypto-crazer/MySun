@@ -7,6 +7,7 @@ import * as m from '@/demo/math';
 import { useStore } from '@/store/useStore';
 import { useVaultApr } from '@/store/selectors';
 import { cx, fmtPct, fmtToken, fmtUsd } from '@/lib/format';
+import { Arrow } from '@/components/ui/Arrow';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { SlidingKey } from '@/components/ui/SlidingKey';
@@ -29,7 +30,7 @@ export function DepositCard({ vault: v, initialAmount, showVaultLink = true }: P
 
   return (
     <div className="w-full max-w-[440px] mx-auto lg:max-w-none">
-      <div className="grid gap-4 rounded-lg border border-stroke-strong bg-background-elevated px-[18px] pb-[18px]">
+      <div className="rounded-lg border border-stroke-strong bg-background-elevated px-[18px] pb-[18px]">
         <div className="relative -mx-[18px] grid grid-cols-2 border-b border-stroke-strong" role="tablist">
           <span
             aria-hidden
@@ -56,15 +57,16 @@ export function DepositCard({ vault: v, initialAmount, showVaultLink = true }: P
           ))}
         </div>
 
+        {/* The vault's name gets room on both sides, so it reads as the title of the overlay, apart from the tabs and the form */}
         {showVaultLink && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 py-8">
             <TokenPair a={v.token0} b={v.token1} size={26} chain={v.chain} />
-            <span className="min-w-0 flex-1 font-serif text-xl font-light leading-tight text-strong">{vaultName(v)}</span>
-            <Link to={`/vault/${v.id}`} className="shrink-0 text-xs text-weaker hover:text-strong">View vault →</Link>
+            <span className="min-w-0 flex-1 font-serif text-xl font-normal leading-tight text-strong">{vaultName(v)}</span>
+            <Link to={`/vault/${v.id}`} className="inline-flex shrink-0 items-center gap-1 text-xs text-weaker hover:text-strong">View vault<Arrow /></Link>
           </div>
         )}
 
-        <div key={`${v.id}-${tab}`} className="animate-[vault-tab-in_200ms_ease-out]">
+        <div key={`${v.id}-${tab}`} className={cx('animate-[vault-tab-in_200ms_ease-out]', !showVaultLink && 'pt-4')}>
           {tab === 'deposit' ? <DepositForm vault={v} initialAmount={initialAmount} /> : <WithdrawForm vault={v} />}
         </div>
       </div>
@@ -147,7 +149,7 @@ function TokenChoice({ options, value, onChange }: { options: Array<{ id: string
   const track = useRef<HTMLDivElement>(null);
   return (
     <div ref={track} className="well groove grid w-full" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
-      <SlidingKey track={track} chosen='[aria-pressed="true"]' tone="glass" />
+      <SlidingKey track={track} chosen='[aria-pressed="true"]' />
       {options.map((o) => (
         <button
           key={o.id}
@@ -178,7 +180,7 @@ function DepositForm({ vault: v, initialAmount }: { vault: Vault; initialAmount?
   const deposit = useStore((s) => s.deposit);
   const pushToast = useStore((s) => s.pushToast);
   const { tvl, breakdown: b } = useVaultApr(v);
-  const apr = b.totalApr;
+  const apr = b.feeApr;
 
   const [asset, setAsset] = useState(STABLE);
   const [amount, setAmount] = useState(initialAmount ?? '');
@@ -202,7 +204,6 @@ function DepositForm({ vault: v, initialAmount }: { vault: Vault; initialAmount?
 
   const insufficientToken = isDual ? (amt > bal(v.token0) ? v.token0 : amt1 > bal(v.token1) ? v.token1 : null) : amt > bal(asset) ? asset : null;
   const insufficient = connected && !!insufficientToken;
-  const monthly = preview ? (preview.netUsd * apr) / 12 : 0;
 
   const doDeposit = async () => {
     if (!preview) return;
@@ -252,21 +253,15 @@ function DepositForm({ vault: v, initialAmount }: { vault: Vault; initialAmount?
       </Field>
 
       <Field label="You receive">
-        <div className="grid gap-1.5 border-t border-stroke-strong pt-3 num">
-          <div className="flex items-baseline justify-between gap-2.5">
-            <span className={cx('display num truncate text-[26px] leading-8', preview ? 'text-strong' : 'text-weaker')}>
-              {preview ? fmtToken(preview.tdlp, 1) : '0'} <span className="ml-0.5 text-sm font-normal text-weak">{v.receiptSymbol}</span>
-            </span>
-            {preview && <span className="text-xs text-weaker shrink-0">≈ {fmtUsd(preview.netUsd, { compact: false, cents: true })}</span>}
-          </div>
-          <div className="flex items-center justify-between gap-2.5 text-xs text-weaker">
-            <span className={preview ? 'text-success' : undefined}>{preview ? `Earning ~${fmtUsd(monthly, { compact: false, cents: monthly < 100 })} / month` : 'Earning'}</span>
-            <span>at {fmtPct(apr)} APR</span>
-          </div>
+        <div className="flex items-baseline justify-between gap-2.5 border-t border-stroke-strong pt-3 num">
+          <span className={cx('display num truncate text-[26px] leading-8', preview ? 'text-strong' : 'text-weaker')}>
+            {preview ? fmtToken(preview.tdlp, 1) : '0'} <span className="ml-0.5 text-sm font-normal text-weak">{v.receiptSymbol}</span>
+          </span>
+          {preview && <span className="text-xs text-weaker shrink-0">≈ {fmtUsd(preview.netUsd, { compact: false, cents: true })}</span>}
         </div>
       </Field>
 
-      <Button block onClick={onSubmit} disabled={cta.disabled} loading={busy || connecting}>{cta.label}</Button>
+      <Button block variant="accent" onClick={onSubmit} disabled={cta.disabled} loading={busy || connecting}>{cta.label}</Button>
 
       <div className="text-xs num">
         <button onClick={() => setDetails(!details)} aria-expanded={details} className="w-full flex items-center justify-between gap-2.5 py-0.5 text-left text-weaker hover:text-weak">

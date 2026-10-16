@@ -232,7 +232,7 @@ function BasketDepositCard({ vault, user, modeSwitch }: { vault: LiveVault; user
   return (
     <section className="bg-background-elevated border border-stroke-weak rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="display text-sm font-semibold">Deposit in kind</h3>
+        <h3 className="display text-sm">Deposit in kind</h3>
         <span className="text-2xs text-weaker">Offers are maximums · only what is required is pulled</span>
       </div>
 
@@ -310,6 +310,7 @@ function BasketDepositCard({ vault, user, modeSwitch }: { vault: LiveVault; user
       <Button
         block
         size="lg"
+        variant="accent"
         onClick={cta.onClick}
         disabled={cta.disabled || busy}
         loading={busy || connecting || (wrongChain && switching)}
@@ -456,7 +457,7 @@ function ZapDepositCard({ vault, user, route, modeSwitch }: { vault: LiveVault; 
   return (
     <section className="bg-background-elevated border border-stroke-weak rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="display text-sm font-semibold">Deposit with {token.symbol} only</h3>
+        <h3 className="display text-sm">Deposit with {token.symbol} only</h3>
         <span className="text-2xs text-weaker">The zap swaps the shortfall · deposits in kind · refunds dust</span>
       </div>
 
@@ -537,6 +538,7 @@ function ZapDepositCard({ vault, user, route, modeSwitch }: { vault: LiveVault; 
       <Button
         block
         size="lg"
+        variant="accent"
         onClick={cta.onClick}
         disabled={cta.disabled || busy}
         loading={busy || connecting || (wrongChain && switching)}

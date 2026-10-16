@@ -2,21 +2,17 @@ import { useLayoutEffect, useState, type RefObject } from 'react';
 import { cx } from '@/lib/format';
 
 interface Props {
-  /** The glass track (`.seg`) this key is rendered inside. */
+  /** The groove (`.well.groove`) this key is rendered inside. */
   track: RefObject<HTMLElement>;
   /** Selector for the chosen item inside the track, e.g. `[aria-selected="true"]`. */
   chosen: string;
-  /** `key` is the lit sand key; `glass` is the secondary button's material. */
-  tone?: 'key' | 'glass';
 }
 
-const tones = { key: 'seg-thumb-key', glass: 'seg-thumb-glass' };
-
 /**
- * The one lit key on a glass track. It finds the chosen item, sits under it, and slides there when the
+ * The one glass key in a groove. It finds the chosen item, sits under it, and slides there when the
  * choice changes. Shared by Segmented and the token choice in the deposit card.
  */
-export function SlidingKey({ track, chosen, tone = 'key' }: Props) {
+export function SlidingKey({ track, chosen }: Props) {
   const [box, setBox] = useState<{ left: number; width: number } | null>(null);
   // The first placement is not animated: the key appears in place, and only slides when the choice changes.
   const [placed, setPlaced] = useState(false);
@@ -48,7 +44,7 @@ export function SlidingKey({ track, chosen, tone = 'key' }: Props) {
   return (
     <span
       aria-hidden
-      className={cx('seg-thumb', tones[tone], placed && 'transition-[transform,width] duration-300 ease-dusk')}
+      className={cx('seg-thumb seg-thumb-glass', placed && 'transition-[transform,width] duration-300 ease-dusk')}
       style={{ width: box.width, transform: `translateX(${box.left}px)` }}
     />
   );

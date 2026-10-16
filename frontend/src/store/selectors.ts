@@ -22,7 +22,6 @@ export interface UserDerived {
   costBasis: number;
   pnlUsd: number;
   pnlPct: number;
-  lockedTide: number;
   pendingTide: number;
   hasPositions: boolean;
 }
@@ -34,7 +33,6 @@ export function useUserDerived(): UserDerived {
   return useMemo(() => {
     const depositsUsd = m.totalDepositsUsd(user.positions, VAULT_BY_ID);
     const costBasis = m.totalCostBasis(user.positions);
-    const lockedTide = m.lockedTide(user.locks);
     const pnlUsd = depositsUsd - costBasis;
     return {
       connected,
@@ -42,7 +40,6 @@ export function useUserDerived(): UserDerived {
       costBasis,
       pnlUsd,
       pnlPct: costBasis > 0 ? pnlUsd / costBasis : 0,
-      lockedTide,
       pendingTide: user.pendingTide,
       hasPositions: Object.keys(user.positions).length > 0,
     };

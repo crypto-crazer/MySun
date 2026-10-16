@@ -1,23 +1,20 @@
-import { useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { VAULTS, VAULT_BY_ID, vaultName } from '@/demo/data/vaults';
+import { VAULTS, VAULT_BY_ID, VOLUME_SNAPSHOT_DATE, vaultName } from '@/demo/data/vaults';
 import { CHAINS, type ChainId } from '@/demo/data/chains';
 import { ChainFilter } from '@/components/ui/ChainFilter';
 import * as m from '@/demo/math';
-import { cx, fmtPct, fmtToken, fmtUsd } from '@/lib/format';
-import { CONSTANTS } from '@/demo/constants';
+import { cx, fmtPct, fmtUsd } from '@/lib/format';
 import type { MarketStatus } from '@/lib/market';
 import type { Vault } from '@/lib/types';
 import { useStore } from '@/store/useStore';
 import { useMarketStatus, useUserDerived, useVaultApr } from '@/store/selectors';
 import { Stat, StatRow } from '@/components/ui/Stat';
 import { TokenPair } from '@/components/ui/TokenIcon';
-import { BoostedApr } from '@/components/ui/BoostedApr';
 import { Button } from '@/components/ui/Button';
-import { AprBreakdown } from '@/components/vault/AprBreakdown';
+import { HINT_UNDERLINE, Tooltip } from '@/components/ui/Tooltip';
+import { Arrow } from '@/components/ui/Arrow';
 import { DepositModal } from '@/components/deposit/DepositModal';
-import { ClaimModal } from '@/components/rewards/ClaimModal';
 import { Welcome } from '@/components/layout/Welcome';
 import { SkyScene } from '@/components/brand/SkyScene';
 import { RangeMeter } from '@/components/vault/RangeMeter';
@@ -28,16 +25,15 @@ export function Markets() {
   const d = useUserDerived();
   const [q, setQ] = useState('');
   const [chain, setChain] = useState<ChainId | 'all'>('all');
-  const [sort, setSort] = useState<{ key: 'tvl' | 'apr'; dir: 'asc' | 'desc' }>({ key: 'tvl', dir: 'desc' });
-  const toggleSort = (key: 'tvl' | 'apr') => setSort((s) => (s.key === key ? { key, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' }));
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'tvl', dir: 'desc' });
+  const toggleSort = (key: SortKey) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' }));
   const [params, setParams] = useSearchParams();
   const depositVault = VAULT_BY_ID[params.get('deposit') ?? ''] ?? null;
-  const claimOpen = params.get('claim') === '1';
   const rows = useMemo(
     () =>
       VAULTS.filter((v) => chain === 'all' || v.chain === chain)
         .filter((v) => `${vaultName(v)} ${CHAINS[v.chain].name}`.toLowerCase().replace(/\s/g, '').includes(q.toLowerCase().replace(/\s/g, '')))
-        .map((v) => ({ v, tvl: m.effectiveTvl(v, tvlDelta), apr: m.aprBreakdown(v, m.effectiveTvl(v, tvlDelta)).totalApr }))
+        .map((v) => ({ v, tvl: m.effectiveTvl(v, tvlDelta), apr: m.aprBreakdown(v, m.effectiveTvl(v, tvlDelta)).feeApr, vol: v.volume24h }))
         .sort((a, b) => (sort.dir === 'desc' ? b[sort.key] - a[sort.key] : a[sort.key] - b[sort.key])),
     [q, chain, tvlDelta, sort],
   );
@@ -50,7 +46,6 @@ export function Markets() {
   }, 0);
 
   const market = useMarketStatus();
-  const cols = showMine ? COLS_MINE : COLS;
 
   return (
     <div>
@@ -63,34 +58,26 @@ export function Markets() {
           {d.connected ? (
             <>
               <p className="eyebrow !text-weak">Your deposits</p>
-              <div className="display num !font-light text-[clamp(48px,6vw,80px)] leading-none tracking-[-0.02em]">{fmtUsd(d.depositsUsd, { compact: false })}</div>
+              <div className="display text-[clamp(48px,6vw,80px)] leading-none tracking-[-0.02em]">{fmtUsd(d.depositsUsd, { compact: false })}</div>
             </>
           ) : (
             <Welcome />
           )}
         </div>
         <div className="wrap relative z-[4] py-6 sm:absolute sm:inset-x-0 sm:bottom-0">
-          {showMine ? (
-            <StatRow cols={2} packed rule={false}>
-              <Stat label="Fees earned" value={`+${fmtUsd(totalFees, { compact: false, cents: true })}`} tone="success" />
-              <Stat label="PMG rewards" value={`${fmtToken(d.pendingTide, 2)} PMG`} tone="accent" sub={<>≈ {fmtUsd(d.pendingTide * CONSTANTS.TIDE_PRICE, { compact: false, cents: true })}</>} />
-            </StatRow>
-          ) : (
-            <StatRow cols={2} packed rule={false}>
-              <Stat label="Total TVL" value={fmtUsd(m.totalTvl(VAULTS, tvlDelta))} />
-              <Stat label="Fees earned (24h)" value={fmtUsd(m.dailyFees(VAULTS, tvlDelta), { compact: false })} />
-            </StatRow>
-          )}
+          {/* Your own fees lead once you hold a position; the whole protocol's readings stay either way */}
+          <StatRow cols={showMine ? 3 : 2} packed rule={false}>
+            {showMine && <Stat label="Your fees earned" value={`+${fmtUsd(totalFees, { compact: false, cents: true })}`} tone="success" />}
+            <Stat label="Total TVL" value={fmtUsd(m.totalTvl(VAULTS, tvlDelta))} />
+            <Stat label="All vaults' fees (24h)" value={fmtUsd(m.dailyFees(VAULTS, tvlDelta), { compact: false })} />
+          </StatRow>
         </div>
       </section>
 
       {/* The plaza: every vault as an instrument */}
       <div className="wrap pt-[52px] pb-[120px]">
         <div className="mb-[22px] flex flex-wrap items-end justify-between gap-x-7 gap-y-[18px]">
-          <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-2">
-            <h1 className="title text-[clamp(32px,3.6vw,46px)]">Vaults</h1>
-            <span className="text-sm text-weaker num">{rows.length} of {VAULTS.length} vaults</span>
-          </div>
+          <h1 className="title text-[clamp(32px,3.6vw,46px)]">Vaults</h1>
           <div className="flex w-full flex-wrap items-center gap-x-[22px] gap-y-3.5 sm:w-auto">
             <ChainFilter value={chain} onChange={setChain} />
             <label className="flex h-10 w-full items-center gap-2 rounded border border-stroke-strong px-3 text-weaker focus-within:border-stroke-strongest sm:w-[220px]">
@@ -109,21 +96,22 @@ export function Markets() {
           </div>
         </div>
 
-        <div className={cx('eyebrow hidden items-center gap-x-6 border-b border-stroke-strong px-4 pb-2.5 md:grid', cols)}>
+        <div className={cx('eyebrow hidden items-center border-b border-stroke-strong px-4 pb-2.5 lg:grid', COLS)}>
           <span>Vault</span>
           <span>Price within its range</span>
           <span className="justify-self-end"><SortHead label="APR" active={sort.key === 'apr'} dir={sort.dir} onClick={() => toggleSort('apr')} /></span>
           <span className="justify-self-end"><SortHead label="TVL" active={sort.key === 'tvl'} dir={sort.dir} onClick={() => toggleSort('tvl')} /></span>
-          {showMine && <span className="justify-self-end">My deposit</span>}
+          <span className="justify-self-end"><SortHead label="1D Vol" tip={VOLUME_NOTE} active={sort.key === 'vol'} dir={sort.dir} onClick={() => toggleSort('vol')} /></span>
           <span />
         </div>
-        <div className="eyebrow flex justify-end gap-[18px] px-3 md:hidden">
+        <div className="eyebrow flex justify-end gap-[18px] px-3 lg:hidden">
           <SortHead label="APR" active={sort.key === 'apr'} dir={sort.dir} onClick={() => toggleSort('apr')} />
           <SortHead label="TVL" active={sort.key === 'tvl'} dir={sort.dir} onClick={() => toggleSort('tvl')} />
+          <SortHead label="1D Vol" tip={VOLUME_NOTE} active={sort.key === 'vol'} dir={sort.dir} onClick={() => toggleSort('vol')} />
         </div>
         <ul>
           {rows.map(({ v, tvl }) => (
-            <VaultRow key={v.id} vault={v} tvl={tvl} market={market} showMine={showMine} cols={cols} onDeposit={() => setParams({ deposit: v.id })} />
+            <VaultRow key={v.id} vault={v} tvl={tvl} market={market} onDeposit={() => setParams({ deposit: v.id })} />
           ))}
           {rows.length === 0 && (
             <li className="border-b border-stroke-weak py-12 text-center text-weaker">No vaults match{q ? ` "${q}"` : ''}{chain !== 'all' ? ` on ${CHAINS[chain].name}` : ''}.</li>
@@ -131,72 +119,44 @@ export function Markets() {
         </ul>
       </div>
       <DepositModal vault={depositVault} onClose={() => setParams({})} />
-      <ClaimModal open={claimOpen} onClose={() => setParams({})} />
     </div>
   );
 }
 
-// Columns: vault, its range, APR, TVL, (my deposit), action
-const COLS = 'md:grid-cols-[minmax(190px,1.15fr)_minmax(220px,1.7fr)_96px_92px_104px]';
-const COLS_MINE = 'md:grid-cols-[minmax(170px,1.1fr)_minmax(200px,1.5fr)_88px_84px_110px_96px] lg:grid-cols-[minmax(190px,1.15fr)_minmax(220px,1.7fr)_96px_92px_118px_104px]';
+type SortKey = 'tvl' | 'apr' | 'vol';
 
-function VaultRow({ vault: v, tvl, market, showMine, cols, onDeposit }: { vault: Vault; tvl: number; market: MarketStatus; showMine: boolean; cols: string; onDeposit: () => void }) {
+// Columns: vault, its range, APR, TVL, 24h volume, action
+// A row only fits from lg; below that it stacks as on a phone. Up to xl the figure columns and gaps
+// are tighter, so the longest pair name keeps clear of the range meter's low price. A longer name is
+// cut with an ellipsis rather than run into it: every row is its own grid, so the column cannot size to it.
+const COLS =
+  'lg:grid-cols-[minmax(250px,1.15fr)_minmax(200px,1.7fr)_88px_76px_76px_76px] lg:gap-x-4 xl:grid-cols-[minmax(190px,1.15fr)_minmax(220px,1.7fr)_96px_92px_104px_104px] xl:gap-x-6';
+
+function VaultRow({ vault: v, tvl, market, onDeposit }: { vault: Vault; tvl: number; market: MarketStatus; onDeposit: () => void }) {
   const navigate = useNavigate();
   const { breakdown: b } = useVaultApr(v);
-  const position = useStore((s) => s.user.positions[v.id]);
-  const [hover, setHover] = useState(false);
-  const aprCell = useRef<HTMLDivElement>(null);
-  const [pop, setPop] = useState<{ top: number; right: number } | null>(null);
-  const onEnter = () => {
-    const r = aprCell.current?.getBoundingClientRect();
-    if (r) setPop({ top: r.bottom + 4, right: window.innerWidth - r.right });
-    setHover(true);
-  };
-  const label = 'mr-1.5 text-xs font-normal text-weaker md:hidden';
+  const label = 'mr-1.5 text-xs font-normal text-weaker lg:hidden';
 
   return (
     <li
       className={cx(
-        'grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 border-b border-stroke-weak px-3 py-4 md:px-4 transition-colors duration-300 ease-dusk hover:bg-strong/[0.035]',
-        "[grid-template-areas:'pair_apr''meter_meter''tvl_act''mine_act'] md:[grid-template-areas:none]",
-        cols,
+        'grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 border-b border-stroke-weak px-3 py-4 lg:px-4 transition-colors duration-300 ease-dusk hover:bg-strong/[0.035]',
+        "[grid-template-areas:'pair_apr''meter_meter''tvl_act''vol_act'] lg:[grid-template-areas:none]",
+        COLS,
       )}
       onClick={() => navigate(`/vault/${v.id}`)}
     >
-      <div className="flex min-w-0 items-center gap-3.5 [grid-area:pair] md:[grid-area:auto]">
-        <TokenPair a={v.token0} b={v.token1} size={26} chain={v.chain} />
-        <div className="min-w-0 font-serif text-[23px] font-light leading-[1.1] text-strong md:whitespace-nowrap">{vaultName(v)}</div>
+      {/* The 26px pair is centred on the name's first line, so a name that wraps on a phone does not pull it down */}
+      <div className="flex min-w-0 items-start gap-3.5 [grid-area:pair] [--name:calc(23px*1.1)] lg:[grid-area:auto]">
+        <span className="flex shrink-0 mt-[calc((var(--name)-26px)/2)]"><TokenPair a={v.token0} b={v.token1} size={26} chain={v.chain} /></span>
+        <div className="min-w-0 font-serif text-[23px] font-normal leading-[var(--name)] text-strong lg:truncate" title={vaultName(v)}>{vaultName(v)}</div>
       </div>
-      <div className="min-w-0 [grid-area:meter] md:[grid-area:auto]"><RangeMeter vault={v} market={market} /></div>
-      <div ref={aprCell} className="justify-self-end whitespace-nowrap [grid-area:apr] md:[grid-area:auto]" onMouseEnter={onEnter} onMouseLeave={() => setHover(false)}>
-        <BoostedApr value={fmtPct(b.totalApr)} className="display num text-xl" />
-        {hover &&
-          pop &&
-          createPortal(
-            <div
-              className="fixed z-40 w-72 bg-background-popover border border-stroke-strong rounded-md shadow-pop p-3 text-left animate-fade-in"
-              style={{ top: pop.top, right: pop.right }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <AprBreakdown vault={v} compact />
-            </div>,
-            document.body,
-          )}
-      </div>
-      <div className="num text-md text-weak [grid-area:tvl] md:justify-self-end md:[grid-area:auto]"><span className={label}>TVL</span>{fmtUsd(tvl)}</div>
-      {showMine && (
-        <div className="num grid gap-px [grid-area:mine] md:justify-items-end md:[grid-area:auto]">
-          {position ? (
-            <>
-              <span className="text-strong"><span className={label}>My deposit</span>{fmtUsd(m.positionValue(position, v), { compact: false })}</span>
-              <small className="text-xs text-success">+{fmtUsd(m.feesEarned(m.positionValue(position, v), v.feeApr7d, position.depositedAt, Date.now()), { compact: false, cents: true })} fees</small>
-            </>
-          ) : (
-            <span className="text-weaker"><span className={label}>My deposit</span>—</span>
-          )}
-        </div>
-      )}
-      <div className="justify-self-end self-center [grid-area:act] md:[grid-area:auto]">
+      <div className="min-w-0 [grid-area:meter] lg:[grid-area:auto]"><RangeMeter vault={v} market={market} /></div>
+      {/* The fee APR alone: PMG rewards are not counted while nothing on screen shows or pays them */}
+      <div className="display num justify-self-end whitespace-nowrap text-xl text-strong [grid-area:apr] lg:[grid-area:auto]">{fmtPct(b.feeApr)}</div>
+      <div className="num text-md text-weak [grid-area:tvl] lg:justify-self-end lg:[grid-area:auto]"><span className={label}>TVL</span>{fmtUsd(tvl)}</div>
+      <div className="num text-md text-weak [grid-area:vol] lg:justify-self-end lg:[grid-area:auto]"><span className={label}>1D Vol</span>{fmtUsd(v.volume24h, { tenths: true })}</div>
+      <div className="justify-self-end self-center [grid-area:act] lg:[grid-area:auto]">
         <Button size="sm" onClick={(e) => { e.stopPropagation(); onDeposit(); }}>
           Deposit
         </Button>
@@ -205,11 +165,22 @@ function VaultRow({ vault: v, tvl, market, showMine, cols, onDeposit }: { vault:
   );
 }
 
-function SortHead({ label, active, dir, onClick }: { label: string; active: boolean; dir: 'asc' | 'desc'; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className={cx('inline-flex items-center gap-[5px] uppercase tracking-label hover:text-strong', active && 'text-strong')} aria-sort={active ? (dir === 'desc' ? 'descending' : 'ascending') : 'none'}>
-      {label}
-      <span aria-hidden>{active ? (dir === 'desc' ? '↓' : '↑') : '↕'}</span>
+/** A sortable column label. With a `tip`, the label is underlined and explains itself on hover or focus. */
+function SortHead({ label, active, dir, onClick, tip }: { label: string; active: boolean; dir: 'asc' | 'desc'; onClick: () => void; tip?: ReactNode }) {
+  const head = (
+    <button onClick={onClick} className={cx('inline-flex items-center gap-[5px] whitespace-nowrap uppercase tracking-label hover:text-strong', active && 'text-strong')}>
+      {/* Only the sorted column carries an arrow. It sits before the label, so the label stays flush with the
+          right-aligned figures below and does not shift when the arrow comes and goes */}
+      {active && <Arrow dir={dir === 'desc' ? 'down' : 'up'} size={10} />}
+      <span className={cx(tip != null && HINT_UNDERLINE)}>{label}</span>
+      {/* aria-sort is only read on a column header, and these rows are a list, not a table: the state goes in the name */}
+      <span className="sr-only">{active ? `, sorted ${dir === 'desc' ? 'descending' : 'ascending'}` : ', sortable'}</span>
     </button>
   );
+  return tip ? <Tooltip content={tip} align="end">{head}</Tooltip> : head;
 }
+
+/** What the 1D Vol figure is: the whole pool's, from one day's snapshot, not the vault's own and not live. */
+const VOLUME_NOTE = (
+  <span className="normal-case tracking-normal">The whole pool's trading volume over 24 hours, not this vault's share. Snapshot from {VOLUME_SNAPSHOT_DATE}, not updated live.</span>
+);

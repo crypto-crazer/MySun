@@ -10,7 +10,7 @@ type Variant = 'primary' | 'accent' | 'secondary' | 'ghost' | 'danger';
 
 const VARIANTS: Array<{ variant: Variant; label: string; use: string }> = [
   { variant: 'primary', label: 'Deposit', use: 'The standard action. Sand, so it never competes with the price.' },
-  { variant: 'accent', label: 'Claim rewards', use: 'Reward actions and the opening call to action. One in view at a time.' },
+  { variant: 'accent', label: 'Connect wallet', use: 'The one main action on a screen: the opening call to action, the deposit card\'s submit. Never two in view.' },
   { variant: 'secondary', label: 'Withdraw', use: 'The other action beside a primary one, or the action that takes value out.' },
   { variant: 'ghost', label: 'Cancel', use: 'Stepping back inside a panel or dialog.' },
   { variant: 'danger', label: 'Remove', use: 'Destructive and irreversible. Outlined, never filled.' },
@@ -22,7 +22,7 @@ function ButtonSection() {
       id="button"
       title="Button"
       source="src/components/ui/Button.tsx"
-      lede="One button in five variants. Sand is the standard action; the sun is kept for reward actions, so a filled amber button always means the same thing."
+      lede="One button in five variants. Sand is the standard action; the sun is kept for the opening call to action, so a filled amber button always means the same thing."
     >
       <SubSection title="Variants" note="Hover each one. Disabled and loading are shown beside it.">
         <div className="divide-y divide-stroke-weak border-y border-stroke-weak">

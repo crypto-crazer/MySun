@@ -108,7 +108,7 @@ export function PriceRange({ vault: v, market, className }: Props) {
       <div className="overflow-hidden rounded-lg border border-stroke-strong bg-fill-recessed">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stroke-weak px-4 py-[11px] text-xs text-weaker">
           <h3 className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-            <b className="text-sm font-medium text-strong">Price range</b>
+            <b className="display text-sm text-strong">Price range</b>
             <Button
               type="button"
               variant="secondary"
@@ -139,53 +139,53 @@ export function PriceRange({ vault: v, market, className }: Props) {
           >
             <defs>
               <linearGradient id={sky} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#120a0e" />
-                <stop offset=".34" stopColor="#22141b" />
-                <stop offset=".62" stopColor="#47282f" />
-                <stop offset=".86" stopColor="#84504a" />
-                <stop offset="1" stopColor="#b26a4e" />
+                <stop offset="0" stopColor="#17121a" />
+                <stop offset=".34" stopColor="#241a26" />
+                <stop offset=".62" stopColor="#44303f" />
+                <stop offset=".86" stopColor="#7a5260" />
+                <stop offset="1" stopColor="#b07a72" />
               </linearGradient>
               {/* a wide, slow falloff: no edge to the light */}
               <radialGradient id={glow} cx={sunX} cy={HORIZON} r={Math.max(280, W * 0.5)} gradientUnits="userSpaceOnUse">
-                <stop offset="0" stopColor="#ff9d5c" stopOpacity=".46" />
-                <stop offset=".18" stopColor="#ff9d5c" stopOpacity=".3" />
-                <stop offset=".42" stopColor="#ff9d5c" stopOpacity=".13" />
-                <stop offset=".7" stopColor="#ff9d5c" stopOpacity=".04" />
-                <stop offset="1" stopColor="#ff9d5c" stopOpacity="0" />
+                <stop offset="0" stopColor="#eda985" stopOpacity=".46" />
+                <stop offset=".18" stopColor="#eda985" stopOpacity=".3" />
+                <stop offset=".42" stopColor="#eda985" stopOpacity=".13" />
+                <stop offset=".7" stopColor="#eda985" stopOpacity=".04" />
+                <stop offset="1" stopColor="#eda985" stopOpacity="0" />
               </radialGradient>
               <radialGradient id={bloom} cx={sunX} cy={HORIZON - 6} r={SUN_R * 3.2} gradientUnits="userSpaceOnUse">
-                <stop offset="0" stopColor="#ffd9a0" stopOpacity=".55" />
-                <stop offset=".35" stopColor="#ffb877" stopOpacity=".22" />
-                <stop offset="1" stopColor="#ffb877" stopOpacity="0" />
+                <stop offset="0" stopColor="#fde4b6" stopOpacity=".55" />
+                <stop offset=".35" stopColor="#f5c08e" stopOpacity=".22" />
+                <stop offset="1" stopColor="#f5c08e" stopOpacity="0" />
               </radialGradient>
               <radialGradient id={sun}>
-                <stop offset="0" stopColor="#fff6e0" />
-                <stop offset=".5" stopColor="#ffd592" />
-                <stop offset="1" stopColor="#ff9a4a" />
+                <stop offset="0" stopColor="#fff8ec" />
+                <stop offset=".5" stopColor="#fee3b4" />
+                <stop offset="1" stopColor="#fbc97e" />
               </radialGradient>
               {/* the stone's face is in shade: the sun is behind it */}
               <linearGradient id={face} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#dcc3b1" />
-                <stop offset=".5" stopColor="#b99889" />
-                <stop offset="1" stopColor="#845f58" />
+                <stop offset="0" stopColor="#dcc8bc" />
+                <stop offset=".5" stopColor="#b59d9c" />
+                <stop offset="1" stopColor="#7c6069" />
               </linearGradient>
               <linearGradient id={side} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#f7dcb8" />
-                <stop offset=".6" stopColor="#f0bc8a" />
-                <stop offset="1" stopColor="#e2955e" />
+                <stop offset="0" stopColor="#fae6cc" />
+                <stop offset=".6" stopColor="#f3cda0" />
+                <stop offset="1" stopColor="#e8b08a" />
               </linearGradient>
               {/* sunlight creeping round the lit edge onto the face, from the left or from the right */}
               <linearGradient id={warmL} x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0" stopColor="#ffb877" stopOpacity=".34" />
-                <stop offset=".7" stopColor="#ffb877" stopOpacity="0" />
+                <stop offset="0" stopColor="#f8c792" stopOpacity=".34" />
+                <stop offset=".7" stopColor="#f8c792" stopOpacity="0" />
               </linearGradient>
               <linearGradient id={warmR} x1="1" y1="0" x2="0" y2="0">
-                <stop offset="0" stopColor="#ffb877" stopOpacity=".34" />
-                <stop offset=".7" stopColor="#ffb877" stopOpacity="0" />
+                <stop offset="0" stopColor="#f8c792" stopOpacity=".34" />
+                <stop offset=".7" stopColor="#f8c792" stopOpacity="0" />
               </linearGradient>
               <linearGradient id={foot} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#2a161a" stopOpacity="0" />
-                <stop offset="1" stopColor="#2a161a" stopOpacity=".38" />
+                <stop offset="0" stopColor="#221a24" stopOpacity="0" />
+                <stop offset="1" stopColor="#221a24" stopOpacity=".38" />
               </linearGradient>
               {/* cut limestone: a fine grain, faint bedding courses lying across the block, and a few pits */}
               <filter id={grain} x="0" y="0" width="1" height="1" colorInterpolationFilters="sRGB">
@@ -205,16 +205,16 @@ export function PriceRange({ vault: v, market, className }: Props) {
                 <feColorMatrix type="matrix" values="1.4 0 0 0 -.2  1.4 0 0 0 -.2  1.4 0 0 0 -.2  0 0 0 0 1" />
               </filter>
               <linearGradient id={ground} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#2a181c" />
-                <stop offset="1" stopColor="#150d10" />
+                <stop offset="0" stopColor="#2b2131" />
+                <stop offset="1" stopColor="#17121a" />
               </linearGradient>
               <linearGradient id={cast} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#0b0608" stopOpacity=".42" />
-                <stop offset="1" stopColor="#0b0608" stopOpacity="0" />
+                <stop offset="0" stopColor="#0f0b11" stopOpacity=".42" />
+                <stop offset="1" stopColor="#0f0b11" stopOpacity="0" />
               </linearGradient>
               <linearGradient id={lane} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#ffae3d" stopOpacity={inRange ? 0.24 : 0.08} />
-                <stop offset="1" stopColor="#ffae3d" stopOpacity="0" />
+                <stop offset="0" stopColor="#fbc97e" stopOpacity={inRange ? 0.24 : 0.08} />
+                <stop offset="1" stopColor="#fbc97e" stopOpacity="0" />
               </linearGradient>
               <clipPath id={above}><rect x="0" y="0" width={W} height={HORIZON} /></clipPath>
             </defs>
@@ -227,8 +227,8 @@ export function PriceRange({ vault: v, market, className }: Props) {
               {/* the price: the sun, setting behind the dunes */}
               <circle cx={sunX} cy={HORIZON - 6} r={SUN_R} fill={`url(#${sun})`} />
             </g>
-            <path d={farDunes} fill="#7a4a47" opacity=".7" />
-            <path d={nearDunes} fill="#4f2e33" />
+            <path d={farDunes} fill="#6a4e5e" opacity=".7" />
+            <path d={nearDunes} fill="#3e2d3b" />
 
             {/* ground: the lit lane between the stones is where the position earns */}
             <rect x="0" y={HORIZON} width={W} height={HEIGHT - HORIZON} fill={`url(#${ground})`} />
@@ -249,7 +249,7 @@ export function PriceRange({ vault: v, market, className }: Props) {
                   <rect x={st.litLeft ? st.x : st.x + STONE_W - 4} y={top} width="4" height={STONE_H} fill={`url(#${side})`} />
                   <rect x={st.x} y={HORIZON - 26} width={STONE_W} height="26" fill={`url(#${foot})`} />
                 </g>
-                <rect x={st.x} y={top} width={STONE_W} height="1" fill="#fff3e0" opacity=".3" />
+                <rect x={st.x} y={top} width={STONE_W} height="1" fill="#fdf3e9" opacity=".3" />
                 <text x={st.centre} y={top - 32} textAnchor="middle" className="fill-weaker" {...label}>{st.name}</text>
                 <text x={st.centre} y={top - 11} textAnchor="middle" fontSize="16" className="fill-strong num">{fmtQuote(st.value)}</text>
               </g>

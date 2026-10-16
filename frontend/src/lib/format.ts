@@ -4,12 +4,13 @@ const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD'
 const usd2 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2, minimumFractionDigits: 2 });
 
 /** `$1,234,567` below 1M, `$12.4M` at or above 1M. */
-export function fmtUsd(v: number, opts: { compact?: boolean; cents?: boolean } = {}): string {
-  const { compact = true, cents = false } = opts;
+export function fmtUsd(v: number, opts: { compact?: boolean; cents?: boolean; tenths?: boolean } = {}): string {
+  const { compact = true, cents = false, tenths = false } = opts;
   const abs = Math.abs(v);
   if (compact && abs >= 1_000_000) {
     const m = v / 1_000_000;
-    return `${v < 0 ? '-' : ''}$${Math.abs(m).toFixed(m >= 100 ? 0 : 1)}M`;
+    // `tenths` keeps the decimal at $100M and up too, for a column whose figures are read against each other
+    return `${v < 0 ? '-' : ''}$${Math.abs(m).toFixed(m >= 100 && !tenths ? 0 : 1)}M`;
   }
   if (cents || abs < 1000) return usd2.format(v);
   return usd0.format(v);

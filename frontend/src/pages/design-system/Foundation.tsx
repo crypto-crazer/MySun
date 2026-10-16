@@ -1,7 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
-import { Mark, MarkLoader } from '@/components/brand/Mark';
+import { Mark, MarkLoader, Wordmark, WordmarkZh } from '@/components/brand/Mark';
 import { Button } from '@/components/ui/Button';
-import { BRAND } from '@/lib/brand';
 import { cx } from '@/lib/format';
 import { PRIMITIVES, SEMANTIC_GROUPS, primitiveHex, type PrimitiveName, type SemanticGroup, type SemanticToken } from '@/lib/tokens';
 import { Code, Rule, Section, Specimen, SubSection, px, useComputed } from './parts';
@@ -39,10 +38,9 @@ const SCALE: Array<{ cls: string; use: string }> = [
 ];
 
 const WEIGHTS: Array<{ cls: string; face?: string; note: string }> = [
-  { cls: 'font-thin', face: 'font-serif', note: 'Zodiak only: the largest titles' },
-  { cls: 'font-light', face: 'font-serif', note: 'Zodiak titles' },
-  { cls: 'font-normal', note: 'Body, and every reading' },
-  { cls: 'font-medium', note: 'Emphasis: labels, buttons, UI titles' },
+  { cls: 'font-light', face: 'font-serif', note: 'Page, card and dialog titles, in Newsreader' },
+  { cls: 'font-normal', note: 'Body, every reading, and vault names in Newsreader' },
+  { cls: 'font-medium', note: 'Emphasis: labels, buttons' },
   { cls: 'font-semibold', note: 'Same as medium. Geist carries emphasis at 500' },
   { cls: 'font-bold', note: 'The ceiling. Rare' },
 ];
@@ -53,12 +51,12 @@ function Typography() {
       id="typography"
       title="Typography"
       source="tailwind.config.ts · src/index.css"
-      lede="Four faces, each with one job. The serif speaks for the page, Geist carries the interface, and every figure is set in Switzer so a column of numbers reads as one hand."
+      lede="Four faces, each with one job. The serif sets every title, Geist carries the interface, and every figure in a reading is set in Switzer so a column of numbers reads as one hand."
     >
       <SubSection title="Families">
         <div className="divide-y divide-stroke-weak border-y border-stroke-weak">
-          <Family name="Zodiak" cls="font-serif" role="Page titles and vault names. Thin at the largest sizes, light below, never bold. Italic marks one word.">
-            <p className="title font-thin text-[clamp(38px,5vw,64px)] leading-[1.02]">Markets move. Your range <em className="font-light">follows.</em></p>
+          <Family name="Newsreader" cls="font-serif" role="Every title: the page title, vault names, card and dialog titles. Light, with vault names at regular; never bold. Italic marks one word.">
+            <p className="title text-[clamp(38px,5vw,64px)] leading-[1.02]">Markets move. Your range <em>follows.</em></p>
           </Family>
           <Family name="Geist" cls="font-sans" role="Everything read or operated: labels, body, controls.">
             <p className="max-w-[46ch] text-md text-strong">Deposits and rebalancing are paused by the vault owner. Redeem stays available.</p>
@@ -75,11 +73,9 @@ function Typography() {
       <SubSection title="Roles" note="A handful of utility classes carry the repeated treatments, so a page asks for a role rather than rebuilding it from sizes and weights.">
         <div className="divide-y divide-stroke-weak border-y border-stroke-weak">
           <Role cls=".title" note="Page-level titles: the serif, light, tight"><span className="title text-2xl">Vault token price</span></Role>
-          <Role cls=".title.font-thin" note="The title a page opens with"><span className="title font-thin text-4xl">ETH / USDG</span></Role>
-          <Role cls=".display" note="UI titles: Geist, medium"><span className="display text-md">Price range</span></Role>
-          <Role cls=".display.num" note="A reading: one weight lighter than a title"><span className="display num text-[22px] leading-7">$2.4M</span></Role>
+          <Role cls=".display" note="UI titles, a size down, and the deposits total on Earn: the same serif, light"><span className="display text-md">Price range</span></Role>
+          <Role cls=".display.num" note="A reading: the sans stack at regular, so the figures are Switzer"><span className="display num text-[22px] leading-7">$2.4M</span></Role>
           <Role cls=".eyebrow" note="The small caps label that names a reading"><span className="eyebrow">Total TVL</span></Role>
-          <Role cls=".wordmark" note="The name in the header"><span className="wordmark">{BRAND.name}</span></Role>
         </div>
       </SubSection>
 
@@ -167,10 +163,10 @@ function WeightTile({ cls, face = 'font-sans', note }: { cls: string; face?: str
 // ── Base colours ──────────────────────────────────────────────────────
 
 const RAMPS: Array<{ title: string; note: string; names: PrimitiveName[] }> = [
-  { title: 'Plum', note: 'The ground. Four tones, darker as the number rises.', names: ['plum-950', 'plum-900', 'plum-800', 'plum-700'] },
-  { title: 'Sand', note: 'Everything written or ruled. 240 and 120 are sand at 24% and 12% over night, kept as solid colours.', names: ['sand-bright', 'sand-1000', 'sand-700', 'sand-500', 'sand-240', 'sand-120'] },
-  { title: 'Sun', note: 'The price, and the reward that follows it. Nothing structural is ever this colour.', names: ['sun-bright', 'sun-1000', 'sun-ink'] },
-  { title: 'Outcomes', note: 'Gain, loss and caution. The tan is dull on purpose, so it is never mistaken for the sun.', names: ['green-1000', 'red-1000', 'tan-1000', 'rose-1000', 'black'] },
+  { title: 'Plum', note: 'The ground: Night, Dusk and Mauve from the guideline. Darker as the number rises.', names: ['plum-950', 'plum-900', 'plum-700'] },
+  { title: 'Sand', note: 'Everything written or ruled: Limestone, Stone and Haze. 240 and 120 are limestone at 24% and 12% over night, kept as solid colours.', names: ['sand-bright', 'sand-1000', 'sand-700', 'sand-500', 'sand-240', 'sand-120'] },
+  { title: 'Sun', note: 'The price, the reward that follows it, and the one main action on a screen. Nothing structural is ever this colour.', names: ['sun-bright', 'sun-1000'] },
+  { title: 'Outcomes', note: 'Gain, loss and caution. The tan is dull on purpose, so it is never mistaken for the sun. Lavender is the one marketing colour allowed in: a chart series, and selection.', names: ['green-1000', 'red-1000', 'tan-1000', 'lavender-1000', 'black'] },
 ];
 
 function BaseColors() {
@@ -213,7 +209,7 @@ function SemanticColors() {
     >
       <SubSection title="Rules">
         <div className="divide-y divide-stroke-weak border-y border-stroke-weak">
-          <Rule title="Semantic classes only" yes={['bg-background-elevated', 'text-weak']} no={[arbitrary('bg', '#2A1B20'), 'text-sand-700']}>
+          <Rule title="Semantic classes only" yes={['bg-background-elevated', 'text-weak']} no={[arbitrary('bg', '#17121A'), 'text-sand-700']}>
             No hex, no arbitrary colour, no base colour in a class. If the role you need is missing, add a token.
           </Rule>
           <Rule title="The utility picks the family" yes={['text-weaker', 'bg-fill-weak', 'border-stroke-strong']} no={['text-fill-weak', 'bg-stroke-strong']}>
@@ -226,7 +222,7 @@ function SemanticColors() {
             Tints and soft edges are a semantic token with an opacity modifier, never a new colour.
           </Rule>
           <Rule title="The sun means price" yes={['text-accent', 'text-success', 'text-error']}>
-            Sun is the price and the reward that follows it. Gain and loss have their own colours and always come with words.
+            Sun is the price, the reward that follows it, and the one main action on a screen. Gain and loss have their own colours and always come with words.
           </Rule>
         </div>
       </SubSection>
@@ -291,7 +287,7 @@ function Surfaces() {
       id="surfaces"
       title="Surfaces & depth"
       source="tailwind.config.ts"
-      lede="Depth is tonal. A surface gets lighter as it comes forward, an edge is a hairline, and only what floats above the page casts a shadow."
+      lede="Depth is tonal. The page is Night, cards and the side sheet are Dusk, menus are Mauve; an edge is a hairline, and only what floats above the page casts a shadow."
     >
       <SubSection title="The stack">
         <div className="rounded-lg border border-stroke-weak bg-background-base p-4 sm:p-6">
@@ -360,7 +356,7 @@ function Shape() {
         <Specimen className="justify-center gap-x-12 !py-10">
           <Mark size={88} className="text-strong" />
           <p className="max-w-[40ch] text-sm text-weak">
-            Two stones are the bounds of the range. The sun between them is the price. In the mark, in a chart and in a control, a circle means the same thing.
+            The sun in the mark is the price. In the mark, in a chart and in a control, a circle means the same thing.
           </p>
         </Specimen>
       </SubSection>
@@ -537,7 +533,7 @@ function Marks() {
       source="src/components/brand/Mark.tsx · src/index.css"
       lede="The few drawn things the interface owns. Each one stands for something, so none of them is used as decoration."
     >
-      <SubSection title="The mark" note="Two stones on a horizon with the sun setting between them. It takes the text colour; the sun keeps its own.">
+      <SubSection title="The mark" note="An s with the sun set in its waist. It takes the text colour; the sun keeps its own. The wordmark's s is the mark, so the two never stand side by side.">
         <Specimen align="end" className="gap-x-10">
           {[16, 24, 40, 64].map((s) => (
             <div key={s} className="grid justify-items-start gap-2.5">
@@ -546,8 +542,12 @@ function Marks() {
             </div>
           ))}
           <div className="grid justify-items-start gap-2.5">
-            <span className="flex items-center gap-3 text-strong"><Mark size={24} /><span className="wordmark">{BRAND.name}</span></span>
-            <span className="font-mono text-xs text-weaker">with the wordmark</span>
+            <Wordmark className="h-5 text-strong" />
+            <span className="font-mono text-xs text-weaker">wordmark, 20px</span>
+          </div>
+          <div className="grid justify-items-start gap-2.5">
+            <WordmarkZh className="h-5 text-strong" />
+            <span className="font-mono text-xs text-weaker">Chinese wordmark, 20px</span>
           </div>
         </Specimen>
       </SubSection>
@@ -556,17 +556,6 @@ function Marks() {
         <Specimen className="!block"><div className="ruler" /></Specimen>
       </SubSection>
 
-      <SubSection title="Hatch" note={<>Class <Code>hatch</Code>: the part that is given up. In the claim sheet it is the half forfeited by claiming early.</>}>
-        <Specimen className="!block">
-          <div className="grid max-w-[420px] gap-2">
-            <div className="flex h-2">
-              <i className="block h-full w-1/2 bg-strong" />
-              <i className="hatch block h-full flex-1" />
-            </div>
-            <div className="flex justify-between text-xs"><span className="text-strong">Received now</span><span className="text-weaker">Forfeited</span></div>
-          </div>
-        </Specimen>
-      </SubSection>
     </Section>
   );
 }
@@ -583,7 +572,7 @@ function Layering() {
       <div className="divide-y divide-stroke-weak border-y border-stroke-weak text-sm">
         {[
           ['z-[70]', 'Modal', 'A dialog and its scrim'],
-          ['z-50', 'Toast, sheets', 'Toasts; the deposit and claim sheets'],
+          ['z-50', 'Toast, sheets', 'Toasts; the deposit sheet'],
           ['z-40', 'Popover', 'Menus, popovers, tooltips'],
           ['z-30', 'Header', 'The sticky header'],
           ['z-20', 'Badge', 'The chain mark on a token pair'],

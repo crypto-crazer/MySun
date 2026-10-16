@@ -11,14 +11,15 @@ interface Props<T extends string> {
 }
 
 /**
- * Segmented control — used for Deposit/Withdraw, 30D/7D, asset chips.
- * A glass track with one lit key on it: the key is a single element that slides to the chosen segment.
+ * Segmented control — used for 30D/7D, the analytics window, the live in-kind/zap switch.
+ * A groove like the deposit card's token choice: the options sit in the well, and the chosen one is
+ * raised out of it as a glass key that slides to it.
  */
 export function Segmented<T extends string>({ value, onChange, options, size = 'md', className }: Props<T>) {
   const track = useRef<HTMLDivElement>(null);
 
   return (
-    <div ref={track} className={cx('seg inline-flex', className)} role="tablist">
+    <div ref={track} className={cx('well groove inline-flex', className)} role="tablist">
       <SlidingKey track={track} chosen='[aria-selected="true"]' />
       {options.map((o) => (
         <button
@@ -30,7 +31,7 @@ export function Segmented<T extends string>({ value, onChange, options, size = '
           className={cx(
             'transition-colors duration-300 ease-dusk whitespace-nowrap disabled:opacity-40',
             size === 'sm' ? 'h-7 px-3 text-xs' : 'h-8 px-3 text-sm',
-            value === o.value ? 'text-inverse-strong' : 'text-weak hover:text-strong',
+            value === o.value ? 'text-strong' : 'text-weak hover:text-strong',
           )}
         >
           {o.label}

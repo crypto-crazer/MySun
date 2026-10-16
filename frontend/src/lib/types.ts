@@ -8,8 +8,14 @@ export interface Vault {
   token1: string;
   receiptSymbol: string;
   chain: ChainId;
+  /** The Uniswap pool the vault provides liquidity in. */
+  poolVersion: 'v3' | 'v4';
+  /** That pool's fee tier, in Uniswap's units (hundredths of a basis point: 500 = 0.05%). */
+  poolFee: number;
   tier: Tier;
   tvl: number;
+  /** The pool's trading volume over the last 24 hours, in USD (the whole pool, not the vault's share). */
+  volume24h: number;
   feeApr7d: number;
   emissionWeight: number;
   rangeWidthPct: number;
@@ -30,15 +36,7 @@ export interface Position {
   depositedAt: number;
 }
 
-export interface Lock {
-  id: string;
-  amount: number; // PMG
-  lockedAt: number;
-  unlockAt: number;
-  redistributionEarned: number; // PMG
-}
-
-export type TxKind = 'deposit' | 'withdraw' | 'stake' | 'claim' | 'lock' | 'unlock';
+export type TxKind = 'deposit' | 'withdraw' | 'stake';
 
 export interface TxRecord {
   id: string;
@@ -52,7 +50,6 @@ export interface UserState {
   positions: Record<string, Position>;
   pendingTide: number;
   pendingUpdatedAt: number;
-  locks: Lock[];
   /** Deposits/withdrawals since load shift vault TVL by this much (USD). */
   tvlDelta: Record<string, number>;
   degenAcknowledged: boolean;

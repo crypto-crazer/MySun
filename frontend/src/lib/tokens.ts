@@ -4,11 +4,14 @@
  *  - lib/theme.ts into hex values for chart libraries,
  *  - /design-system into the swatches, and docs/design-system.md describes the rules.
  *
- * 1. Primitives: the Dusk palette, named by ramp and level. A component never names one.
+ * 1. Primitives: the palette, named by ramp and level. A component never names one.
  * 2. Semantic tokens: named by role, each pointing at one primitive. Only these become Tailwind
  *    colours, so only these can be reached from a class.
  *
- * Dusk is dark only, so there is one set of values.
+ * The palette is the brand guideline's (v2, sampled from the brand photographs): Night, Dusk and
+ * Mauve for the ground, Limestone, Stone and Haze for type, Sun for the price. A primitive whose
+ * note says "derived" is not in the guideline; it is worked out from the guideline's colours.
+ * Dark only, so there is one set of values.
  */
 
 export interface Primitive {
@@ -19,26 +22,25 @@ export interface Primitive {
 
 export const PRIMITIVES = {
   // Plum: the ground. Higher numbers are darker.
-  'plum-950': { rgb: [21, 13, 16], note: 'Night' },
-  'plum-900': { rgb: [31, 20, 24], note: 'Dusk' },
-  'plum-800': { rgb: [42, 27, 32], note: 'Raised dusk' },
-  'plum-700': { rgb: [54, 36, 42], note: 'High dusk' },
-  // Sand: everything written or ruled. 240 and 120 are sand at 24% and 12% over night, kept solid.
-  'sand-bright': { rgb: [255, 246, 232], note: 'Sand, lit' },
-  'sand-1000': { rgb: [239, 227, 209], note: 'Sand' },
-  'sand-700': { rgb: [196, 177, 157], note: 'Sand 2' },
-  'sand-500': { rgb: [156, 136, 120], note: 'Sand 3' },
-  'sand-240': { rgb: [73, 64, 62], note: 'Sand at 24% on night' },
-  'sand-120': { rgb: [47, 39, 39], note: 'Sand at 12% on night' },
+  'plum-950': { rgb: [23, 18, 26], note: 'Night' },
+  'plum-900': { rgb: [34, 26, 36], note: 'Dusk' },
+  'plum-700': { rgb: [58, 44, 56], note: 'Mauve' },
+  // Sand: everything written or ruled. 240 and 120 are limestone at 24% and 12% over night, kept solid.
+  'sand-bright': { rgb: [253, 243, 233], note: 'Limestone, lit (derived)' },
+  'sand-1000': { rgb: [237, 224, 210], note: 'Limestone' },
+  'sand-700': { rgb: [201, 180, 166], note: 'Stone' },
+  'sand-500': { rgb: [160, 140, 160], note: 'Haze' },
+  'sand-240': { rgb: [74, 67, 70], note: 'Limestone at 24% on night (derived)' },
+  'sand-120': { rgb: [49, 43, 48], note: 'Limestone at 12% on night (derived)' },
   // Sun: the price, and the reward that follows it. Nothing structural.
-  'sun-bright': { rgb: [255, 227, 163], note: 'Sun core' },
-  'sun-1000': { rgb: [255, 174, 61], note: 'Sun' },
-  'sun-ink': { rgb: [42, 22, 6], note: 'Ink on sun' },
+  'sun-bright': { rgb: [253, 228, 182], note: 'Sun, lit (derived)' },
+  'sun-1000': { rgb: [251, 201, 126], note: 'Sun' },
   // Outcomes and caution. The tan is dull on purpose, so it is never mistaken for the sun.
   'green-1000': { rgb: [146, 214, 166], note: 'Gain' },
   'red-1000': { rgb: [255, 138, 143], note: 'Loss' },
-  'tan-1000': { rgb: [224, 176, 122], note: 'Caution' },
-  'rose-1000': { rgb: [179, 109, 95], note: 'Rose' },
+  'tan-1000': { rgb: [191, 148, 112], note: 'Caution (derived)' },
+  // The one marketing colour the guideline lets into the product: a chart series, and selection.
+  'lavender-1000': { rgb: [141, 112, 135], note: 'Lavender' },
   black: { rgb: [0, 0, 0], note: 'Black' },
 } as const satisfies Record<string, Primitive>;
 
@@ -74,25 +76,25 @@ export const SEMANTIC_GROUPS: SemanticGroup[] = [
       { name: 'weak', ref: 'sand-700', use: 'Supporting text, labels beside a value' },
       { name: 'weaker', ref: 'sand-500', use: 'Eyebrows, hints, placeholders, axis ticks' },
       { name: 'disabled', ref: 'sand-500', use: 'Text on a disabled control' },
-      { name: 'inverse-strong', ref: 'plum-950', use: 'Text on a sand fill: primary button, tooltip, selected segment' },
-      { name: 'on-accent', ref: 'sun-ink', use: 'Text on a sun fill' },
+      { name: 'inverse-strong', ref: 'plum-950', use: 'Text on a sand fill: primary button, tooltip' },
+      { name: 'on-accent', ref: 'plum-950', use: 'Text on a sun fill' },
       { name: 'accent', ref: 'sun-1000', use: 'The price, reward amounts, text links' },
       { name: 'accent-bright', ref: 'sun-bright', use: 'Price readout, hovered text link' },
       { name: 'success', ref: 'green-1000', use: 'Gain, in range, confirmed' },
       { name: 'error', ref: 'red-1000', use: 'Loss, out of range, failed' },
       { name: 'warning', ref: 'tan-1000', use: 'Caution, demo data, paused' },
-      { name: 'chart-secondary', ref: 'rose-1000', cssOnly: true, use: 'A chart series with no meaning of its own (volume bars)' },
+      { name: 'chart-secondary', ref: 'lavender-1000', cssOnly: true, use: 'A chart series with no meaning of its own (volume bars)' },
     ],
   },
   {
     id: 'background',
     title: 'Background',
     utilities: 'bg-background-*',
-    note: 'The four surfaces something can sit on. Depth is tonal: a surface gets lighter as it comes forward, and none of them carries a shadow except the popover.',
+    note: 'The four surfaces something can sit on. The page is Night; cards, dialogs and the side sheet are Dusk; menus and popovers are Mauve. None of them carries a shadow except the popover.',
     tokens: [
       { name: 'background-base', ref: 'plum-950', use: 'The page, the header' },
       { name: 'background-sheet', ref: 'plum-900', use: 'Side sheet, scene ground' },
-      { name: 'background-elevated', ref: 'plum-800', use: 'Cards, dialogs, toasts' },
+      { name: 'background-elevated', ref: 'plum-900', use: 'Cards, dialogs, toasts' },
       { name: 'background-popover', ref: 'plum-700', use: 'Menus and popovers' },
     ],
   },
@@ -108,16 +110,16 @@ export const SEMANTIC_GROUPS: SemanticGroup[] = [
       { name: 'fill-selected', ref: 'plum-700', use: 'The chosen chip' },
       { name: 'fill-disabled', ref: 'plum-700', use: 'A disabled filled button' },
       { name: 'fill-track', ref: 'sand-120', use: 'Switch off, progress and slider tracks' },
-      { name: 'fill-primary', ref: 'sand-1000', use: 'Primary action, selected segment, switch on' },
-      { name: 'fill-primary-hover', ref: 'sand-bright', use: 'Primary action, hovered' },
+      { name: 'fill-primary', ref: 'sand-1000', use: 'Switch on, slider thumb' },
+      { name: 'fill-primary-hover', ref: 'sand-bright', use: 'The highlight on a primary key' },
       { name: 'fill-primary-shade', ref: 'sand-700', use: 'The body of a primary key, under its highlight' },
-      { name: 'fill-accent', ref: 'sun-1000', use: 'Reward action, reward switch on' },
-      { name: 'fill-accent-hover', ref: 'sun-bright', use: 'Reward action, hovered' },
+      { name: 'fill-accent', ref: 'sun-1000', use: 'The one main action on a screen' },
+      { name: 'fill-accent-hover', ref: 'sun-bright', use: 'The highlight on the main action' },
       { name: 'fill-inverse', ref: 'sand-1000', use: 'Tooltips' },
       { name: 'fill-success', ref: 'green-1000', use: 'Success tint (use /10)' },
       { name: 'fill-error', ref: 'red-1000', use: 'Error tint (use /10)' },
       { name: 'fill-warning', ref: 'tan-1000', use: 'Warning tint (use /10)' },
-      { name: 'fill-selection', ref: 'rose-1000', cssOnly: true, use: 'Text selection, at 35%' },
+      { name: 'fill-selection', ref: 'lavender-1000', cssOnly: true, use: 'Text selection, at 35%' },
       { name: 'fill-overlay', ref: 'black', alpha: 0.6, use: 'Scrim behind a dialog or sheet' },
     ],
   },
@@ -135,7 +137,7 @@ export const SEMANTIC_GROUPS: SemanticGroup[] = [
       { name: 'stroke-focused', ref: 'sun-1000', use: 'Keyboard focus ring, the focused amount field' },
       { name: 'stroke-primary', ref: 'sand-1000', use: 'Edge of a primary fill' },
       { name: 'stroke-primary-hover', ref: 'sand-bright', use: 'Edge of a primary fill, hovered' },
-      { name: 'stroke-accent', ref: 'sun-1000', use: 'Edge of an accent fill, the chosen reward option' },
+      { name: 'stroke-accent', ref: 'sun-1000', use: 'Edge of an accent fill' },
       { name: 'stroke-accent-hover', ref: 'sun-bright', use: 'Edge of an accent fill, hovered' },
       { name: 'stroke-success', ref: 'green-1000', use: 'Success edge (use /40)' },
       { name: 'stroke-error', ref: 'red-1000', use: 'Error edge (use /40), invalid field' },

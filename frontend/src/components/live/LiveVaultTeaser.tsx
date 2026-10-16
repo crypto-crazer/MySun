@@ -5,6 +5,7 @@ import { formatAmountSignificant, shortHex } from '@/chain/amounts';
 import { useLiveVault, useUserBasket } from '@/chain/useVault';
 import { chainLabel, isLocalChain, vaultsForChain } from '@/chain/chains';
 import { LiveBadge } from '@/components/ui/DataBadge';
+import { BRAND } from '@/lib/brand';
 
 export function LiveVaultTeaser() {
   const { address } = useWallet();
@@ -18,7 +19,7 @@ export function LiveVaultTeaser() {
     <section className="bg-background-elevated border border-stroke-weak rounded-lg p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 min-w-0">
-          <h2 className="display text-sm font-semibold">{vault.entry?.label ?? vault.name ?? 'MySun vault'}</h2>
+          <h2 className="display text-sm">{vault.entry?.label ?? vault.name ?? `${BRAND.name} vault`}</h2>
           <LiveBadge />
           <span className="text-2xs text-weaker num truncate">
             {chainName}
@@ -36,7 +37,7 @@ export function LiveVaultTeaser() {
 
       {!vault.hasDeployment ? (
         <p className="mt-3 text-xs text-warning">
-          No MySun deployment on {chainName} yet — switch network in the header. The prototype below keeps working.
+          No {BRAND.name} deployment on {chainName} yet — switch network in the header. The prototype below keeps working.
         </p>
       ) : unreachable ? (
         <p className="mt-3 text-xs text-warning">
