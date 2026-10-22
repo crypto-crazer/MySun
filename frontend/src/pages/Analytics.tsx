@@ -72,11 +72,11 @@ export function Analytics() {
       <section className="bg-background-elevated border border-stroke-weak rounded-lg p-5 md:p-6 space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-3">
               <h1 className="display text-2xl">Protocol analytics</h1>
               <DemoBadge />
             </div>
-            <p className="text-sm text-weak mt-1">{BRAND.name} vaults on {chainName ?? 'this chain'}.</p>
+            <p className="text-base text-weak mt-1">{BRAND.name} vaults on {chainName ?? 'this chain'}.</p>
           </div>
           <Segmented<Window> size="sm" value={win} onChange={setWin} options={[{ value: 'week', label: 'This week' }, { value: 'all', label: '8 weeks' }]} />
         </div>
@@ -134,19 +134,19 @@ function BarCard({ title, data, k, color }: { title: string; data: Week[]; k: Me
     <section className="bg-background-elevated border border-stroke-weak rounded-lg p-5">
       <div className="flex items-baseline justify-between">
         <h3 className="display text-md">{title}</h3>
-        <span className="text-sm text-weak num">{fmtUsd(total)} <span className="text-weaker text-xs">8 weeks</span></span>
+        <span className="text-base text-weak num">{fmtUsd(total)} <span className="text-weaker text-xs">8 weeks</span></span>
       </div>
       <div className="h-40 mt-4">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap="30%">
-            <XAxis dataKey="date" tick={{ fill: pal.weaker, fontSize: 11 }} tickLine={false} axisLine={false} ticks={[data[0].date, data[4].date, data[lastIdx].date]} />
+            <XAxis dataKey="date" tick={{ fill: pal.weaker, fontSize: 10 }} tickLine={false} axisLine={false} ticks={[data[0].date, data[4].date, data[lastIdx].date]} />
             <RTooltip
               cursor={{ fill: pal.fillHover }}
               content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;
                 const p = payload[0].payload as Week;
                 return (
-                  <div className="bg-background-elevated border border-stroke-weak rounded-md shadow-pop px-2.5 py-1.5 text-xs num">
+                  <div className="bg-background-elevated border border-stroke-weak rounded-md shadow-pop px-3 py-2 text-xs num">
                     <div className="text-weaker">Week of {p.date}</div>
                     <div className="text-strong font-medium">{fmtUsd(p[k], { compact: p[k] >= 1_000_000 })}</div>
                   </div>

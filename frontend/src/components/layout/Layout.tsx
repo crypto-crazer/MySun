@@ -34,8 +34,8 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="border-t border-stroke-weak">
-        <div className="wrap py-[22px] flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs text-weaker">
-          <span>{BRAND.name} · figures are read live from the chain; anything illustrative is badged.</span>
+        <div className="wrap py-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs text-weaker">
+          <span>{BRAND.name} · figures are read live from the chain. The price chart is illustrative until enough history exists.</span>
           <span>LP positions can lose value and may underperform holding the assets.</span>
         </div>
       </footer>

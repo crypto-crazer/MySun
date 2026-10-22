@@ -76,8 +76,8 @@ function ToggleSection() {
       lede="A setting that takes effect at once. The knob is square-cut like every other control; on is a filled track, off is an empty one."
     >
       <Specimen code='<Toggle checked={on} onChange={setOn} label="Auto-compound" />'>
-        <label className="flex items-center gap-3 text-sm text-weak"><Toggle checked={a} onChange={setA} label="Auto-compound" /> Auto-compound</label>
-        <label className="flex items-center gap-3 text-sm text-weak"><Toggle checked={b} onChange={setB} label="Show closed vaults" /> Show closed vaults</label>
+        <label className="flex items-center gap-3 text-base text-weak"><Toggle checked={a} onChange={setA} label="Auto-compound" /> Auto-compound</label>
+        <label className="flex items-center gap-3 text-base text-weak"><Toggle checked={b} onChange={setB} label="Show closed vaults" /> Show closed vaults</label>
       </Specimen>
       <SubSection title="Props">
         <PropsTable
@@ -139,7 +139,7 @@ function UnderlineTabsSection() {
       <Specimen className="!block" code="<UnderlineTabs value={tab} onChange={setTab} options={[…]} />">
         <UnderlineTabs value={tab} onChange={setTab} options={[{ value: 'overview', label: 'Overview' }, { value: 'history', label: 'Rebalance history' }, { value: 'parameters', label: 'Parameters' }]} />
       </Specimen>
-      <p className="max-w-[64ch] text-sm text-weak">Takes the same props as Segmented, without <Code>size</Code>.</p>
+      <p className="max-w-[64ch] text-base text-weak">Takes the same props as Segmented, without <Code>size</Code>.</p>
     </Section>
   );
 }
@@ -153,7 +153,7 @@ function ChainFilterSection() {
       lede="A row of text tabs for the network, the chosen one underlined. With one chain there is nothing to choose, so it draws nothing: that is why the Earn page shows no filter today."
     >
       <Specimen code="<ChainFilter value={chain} onChange={setChain} />">
-        <span className="text-sm text-weaker">Nothing is drawn while Robinhood Chain is the only network. Add a second chain to the component's list and the filter shows itself.</span>
+        <span className="text-base text-weaker">Nothing is drawn while Robinhood Chain is the only network. Add a second chain to the component's list and the filter shows itself.</span>
       </Specimen>
     </Section>
   );
@@ -170,11 +170,11 @@ function NativeControlsSection() {
       lede="Two native controls, restyled rather than rebuilt, so they keep their keyboard and screen reader behaviour for free."
     >
       <Specimen code={'<input type="range" />   <input type="checkbox" className="accent-fill-accent" />'}>
-        <label className="grid w-full max-w-[280px] gap-2.5 text-sm text-weak">
+        <label className="grid w-full max-w-[280px] gap-3 text-base text-weak">
           <span className="flex justify-between"><span>Withdraw</span><span className="num text-strong">{pct}%</span></span>
           <input type="range" min={0} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} />
         </label>
-        <label className="flex items-start gap-2.5 text-sm text-weak">
+        <label className="flex items-start gap-3 text-base text-weak">
           <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 accent-fill-accent" />
           I understand that LP positions can lose value.
         </label>

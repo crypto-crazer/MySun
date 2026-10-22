@@ -36,8 +36,8 @@ function TooltipSection() {
       </SubSection>
       <SubSection title="Hint" note={<>A term with more to say carries a dashed underline, not an icon. A label that is already a button (a sort header) takes <Code>HINT_UNDERLINE</Code> and sits inside a Tooltip instead.</>}>
         <Specimen code='<Hint tip="…">Trading fees</Hint>'>
-          <span className="text-sm text-weak"><Hint tip="The 7-day average, annualised.">Trading fees</Hint></span>
-          <span className="text-sm text-weak"><Hint wide tip="The whole pool's trading volume over 24 hours, not this vault's share.">1D Vol</Hint></span>
+          <span className="text-base text-weak"><Hint tip="The 7-day average, annualised.">Trading fees</Hint></span>
+          <span className="text-base text-weak"><Hint wide tip="The whole pool's trading volume over 24 hours, not this vault's share.">1D Vol</Hint></span>
         </Specimen>
       </SubSection>
       <SubSection title="Props">
@@ -98,11 +98,11 @@ function SpinnerSection() {
       lede="The busy indicator is the mark itself, with the sun rising and setting between the stones. It takes the text colour of whatever holds it."
     >
       <Specimen align="end" className="gap-x-10" code='<Spinner className="h-4 w-[26px]" />'>
-        <div className="grid justify-items-start gap-2.5"><Spinner className="h-4 w-[26px] text-strong" /><span className="font-mono text-2xs text-weaker">in a button</span></div>
-        <div className="grid justify-items-start gap-2.5"><Spinner className="h-6 w-[39px] text-weak" /><span className="font-mono text-2xs text-weaker">in a panel</span></div>
-        <div className="grid justify-items-start gap-2.5"><Spinner className="h-10 w-[65px] text-strong" /><span className="font-mono text-2xs text-weaker">a page waiting</span></div>
+        <div className="grid justify-items-start gap-3"><Spinner className="h-4 w-[26px] text-strong" /><span className="font-mono text-2xs text-weaker">in a button</span></div>
+        <div className="grid justify-items-start gap-3"><Spinner className="h-6 w-[39px] text-weak" /><span className="font-mono text-2xs text-weaker">in a panel</span></div>
+        <div className="grid justify-items-start gap-3"><Spinner className="h-10 w-[65px] text-strong" /><span className="font-mono text-2xs text-weaker">a page waiting</span></div>
       </Specimen>
-      <p className="max-w-[64ch] text-sm text-weak">It is sized by class and keeps a 26:16 shape. For one button's own submit, use <Code>{'<Button loading>'}</Code> rather than placing a spinner by hand.</p>
+      <p className="max-w-[64ch] text-base text-weak">It is sized by class and keeps a 26:16 shape. For one button's own submit, use <Code>{'<Button loading>'}</Code> rather than placing a spinner by hand.</p>
     </Section>
   );
 }
@@ -136,9 +136,9 @@ function ModalSection() {
         }
       >
         <p>Degen vaults run narrow, high-frequency ranges on volatile pairs. Higher fees, higher impermanent loss risk. Net value can underperform holding.</p>
-        <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-strong">
+        <label className="mt-4 flex cursor-pointer items-start gap-3 text-strong">
           <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 accent-fill-accent" />
-          <span className="text-sm">I understand this vault can lose value versus holding the underlying tokens.</span>
+          <span className="text-base">I understand this vault can lose value versus holding the underlying tokens.</span>
         </label>
       </Modal>
       <SubSection title="Props">

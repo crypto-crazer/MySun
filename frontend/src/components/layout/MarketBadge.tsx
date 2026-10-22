@@ -21,8 +21,8 @@ export function MarketBadge() {
         </span>
       }
     >
-      <span className={cx('inline-flex items-center gap-2 h-8 px-2.5 rounded border text-xs cursor-help', open ? 'border-stroke-primary/30 text-weak' : 'border-stroke-warning/30 text-warning')}>
-        <span className={cx('h-1.5 w-1.5 rounded-full', open ? 'bg-strong' : 'bg-warning')} />
+      <span className={cx('inline-flex items-center gap-2 h-8 px-3 rounded border text-xs cursor-help', open ? 'border-stroke-primary/30 text-weak' : 'border-stroke-warning/30 text-warning')}>
+        <span className={cx('h-2 w-2 rounded-full', open ? 'bg-strong' : 'bg-warning')} />
         <span className="hidden sm:inline">{open ? 'US market open' : 'US market closed'}</span>
         <span className="sm:hidden">{open ? 'Open' : 'Closed'}</span>
       </span>

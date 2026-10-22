@@ -49,13 +49,13 @@ export function ChainSelector() {
         className={cx('sm:!px-4', warn && 'btn-glass-warning')}
       >
         {/* flex, not inline-flex, here and on the mark: an inline box sits on the label's text line and ends up above centre */}
-        <span className="flex min-w-0 items-center gap-2 sm:gap-2.5">
+        <span className="flex min-w-0 items-center gap-2 sm:gap-3">
           {switching ? (
             <Spinner className="h-3 w-3 text-weaker" />
           ) : robinhood ? (
             <span className="relative flex shrink-0">
               <ChainLogo chain="robinhood" size={18} />
-              {warn && <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-warning ring-[1.5px] ring-background-base" aria-hidden />}
+              {warn && <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-warning ring-[1.5px] ring-background-base" aria-hidden />}
             </span>
           ) : (
             <span className={cx('h-2 w-2 rounded-full shrink-0', warn ? 'bg-warning' : 'bg-success')} aria-hidden />
@@ -90,7 +90,7 @@ export function ChainSelector() {
                     });
                   }}
                   className={cx(
-                    'w-full rounded px-2.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-background-elevated disabled:cursor-not-allowed',
+                    'w-full rounded px-3 py-2 text-left text-xs flex items-center gap-2 hover:bg-background-elevated disabled:cursor-not-allowed',
                     current ? 'text-strong' : 'text-weak',
                   )}
                 >

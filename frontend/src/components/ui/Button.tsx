@@ -22,9 +22,9 @@ const variants: Record<Variant, string> = {
 };
 
 const sizes: Record<Size, string> = {
-  xs: 'h-7 px-2.5 text-xs [--btn-radius:8px]',
-  sm: 'h-9 px-3 text-sm',
-  md: 'h-11 px-[18px] text-base',
+  xs: 'h-7 px-2 text-xs [--btn-radius:8px]',
+  sm: 'h-9 px-3 text-base',
+  md: 'h-11 px-4 text-base',
   lg: 'h-12 px-5 text-md',
 };
 

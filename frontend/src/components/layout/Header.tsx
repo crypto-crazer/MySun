@@ -51,7 +51,7 @@ export function Header() {
               end={n.to === '/'}
               className={({ isActive }) =>
                 cx(
-                  // The serif at 15px matches the size the sans read at 14px; the 20px line keeps the active tick on the rule
+                  // The serif runs a step above the sans (16px to 14px) to read at the same size; the 20px line keeps the active tick on the rule
                   'relative px-3 py-2 font-serif text-md leading-5 whitespace-nowrap transition-colors',
                   // the active page is marked by a short tick on the header rule, in the sun colour
                   isActive ? 'text-strong after:absolute after:left-1/2 after:-bottom-[3px] md:after:-bottom-[11px] after:h-[9px] after:w-px after:bg-accent' : 'text-weaker hover:text-strong',

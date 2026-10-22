@@ -173,11 +173,11 @@ describe('priceBands — min lower / max upper per token, bucketed by the (token
 describe('rangePairsFor — live spot between the real band', () => {
   const prices = new Map([[USDG.toLowerCase(), 1], [WETH.toLowerCase(), 2_300], [PONS.toLowerCase(), 0.24]]);
 
-  it('one pair per non-USDG token that has both a spot and a band', () => {
+  it('one pair per non-USDG token that has both a spot and a band, named for display (WETH as ETH)', () => {
     const bands = priceBands(TOKENS, 'USDG', [pos(WETH, USDG, -199300, -198090), pos(PONS, USDG, -291120, -289860)]);
     const pairs = rangePairsFor(TOKENS, prices, bands);
-    expect(pairs.map((p) => p.base)).toEqual(['WETH', 'PONS']);
-    expect(pairs[0]).toEqual({ base: 'WETH', quote: 'USDG', price: 2_300, ...bands.get(WETH.toLowerCase())! });
+    expect(pairs.map((p) => p.base)).toEqual(['ETH', 'PONS']);
+    expect(pairs[0]).toEqual({ base: 'ETH', quote: 'USDG', price: 2_300, ...bands.get(WETH.toLowerCase())! });
   });
 
   it('a token without a band is left out — never a fixed-width fallback', () => {

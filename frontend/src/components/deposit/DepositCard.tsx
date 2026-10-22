@@ -14,7 +14,7 @@
  * A paused vault freezes every action ("Vault is paused"). USD figures (≈ $) are display only: live
  * reference-pool spots and the live spot NAV, passed in by the page.
  */
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Address } from 'viem';
 import { erc20Abi, parseEventLogs } from 'viem';
@@ -39,6 +39,7 @@ import { describeChainError } from '@/chain/errors';
 import {
   ZAP_DEFAULT_SLIPPAGE_BPS,
   ZAP_MAX_SLIPPAGE_BPS,
+  ZAP_ROUTE_SYMBOL,
   describeZapError,
   parseZapDepositAmount,
   parseZapRedeemShares,
@@ -59,10 +60,11 @@ import {
   useUserBasket,
   useZapRoutes,
   type LiveVault,
+  type TokenMeta,
   type UserBasket,
   type ZapRoute,
 } from '@/chain/useVault';
-import { basketName, feeLabel, tokenUsdPrices, vaultRouteId } from '@/chain/liveVaults';
+import { basketName, displaySymbol, feeLabel, tokenUsdPrices, vaultRouteId } from '@/chain/liveVaults';
 import type { LiveVaultRow } from '@/chain/useLiveVaults';
 import type { ChainSpots } from '@/chain/useSpotPrices';
 import { useStore } from '@/store/useStore';
@@ -100,8 +102,8 @@ export function DepositCard({ vault: v, user, usdPrices, nav, initialAmount, sho
 
   return (
     <div className="w-full max-w-[440px] mx-auto lg:max-w-none">
-      <div className="rounded-lg border border-stroke-strong bg-background-elevated px-[18px] pb-[18px]">
-        <div className="relative -mx-[18px] grid grid-cols-2 border-b border-stroke-strong" role="tablist">
+      <div className="rounded-lg border border-stroke-strong bg-background-elevated px-5 pb-5">
+        <div className="relative -mx-5 grid grid-cols-2 border-b border-stroke-strong" role="tablist">
           <span
             aria-hidden
             className={cx(
@@ -109,7 +111,7 @@ export function DepositCard({ vault: v, user, usdPrices, nav, initialAmount, sho
               tab === 'withdraw' && 'translate-x-full',
             )}
           >
-            <span className="absolute inset-y-0 inset-x-[18px] bg-strong" />
+            <span className="absolute inset-y-0 inset-x-5 bg-strong" />
           </span>
           {(['deposit', 'withdraw'] as Tab[]).map((t) => (
             <button
@@ -118,7 +120,7 @@ export function DepositCard({ vault: v, user, usdPrices, nav, initialAmount, sho
               aria-selected={tab === t}
               onClick={() => setTab(t)}
               className={cx(
-                'relative py-[13px] text-base transition-colors duration-300 ease-dusk',
+                'relative py-3 text-base transition-colors duration-300 ease-dusk',
                 tab === t ? 'text-strong' : 'text-weaker hover:text-weak',
               )}
             >
@@ -148,9 +150,9 @@ export function DepositCard({ vault: v, user, usdPrices, nav, initialAmount, sho
           ) : v.tokens.length === 0 ? (
             <div className="flex justify-center py-10"><Spinner className="h-5 w-5 text-weaker" /></div>
           ) : tab === 'deposit' ? (
-            <DepositForm ctx={ctx} route={routes.zapIn} initialAmount={initialAmount} />
+            <DepositForm ctx={ctx} route={routes.zapIn} pending={routes.zapInPending} initialAmount={initialAmount} />
           ) : (
-            <WithdrawForm ctx={ctx} route={routes.zapOut} />
+            <WithdrawForm ctx={ctx} route={routes.zapOut} pending={routes.zapOutPending} />
           )}
         </div>
       </div>
@@ -177,6 +179,9 @@ function errorContext(v: LiveVault, route?: ZapRoute) {
   };
 }
 
+/** The vault as the confirmation toasts name it: the basket's display name ("ETH / USDG"), not the registry label. */
+const vaultName = (v: LiveVault) => basketName(v.tokens.map((t) => t.symbol), v.entry?.label ?? 'the vault');
+
 /** Whole-token display value of a raw amount (USD estimates only — never fed to a transaction). */
 const whole = (raw: bigint, decimals: number) => Number(raw) / 10 ** decimals;
 
@@ -197,38 +202,41 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** Amount box — the one thing the user touches. Token is shown, not chosen here. */
+/** Amount box — the one thing the user touches. The token is shown, or chosen in `picker` where the form offers a choice. */
 function AmountBox({
-  value, onChange, tokenLabel, tokenIcon, balance, decimals, connected, usd, autoFocus, error, note, ariaLabel,
+  value, onChange, tokenLabel, tokenIcon, picker, balance, decimals, connected, usd, autoFocus, disabled, error, note, ariaLabel,
 }: {
-  value: string; onChange: (s: string) => void; tokenLabel: string; tokenIcon?: ReactNode;
-  balance?: bigint; decimals: number; connected: boolean; usd?: number; autoFocus?: boolean; error?: string | boolean; note?: string; ariaLabel: string;
+  value: string; onChange: (s: string) => void; tokenLabel: string; tokenIcon?: ReactNode; picker?: ReactNode;
+  balance?: bigint; decimals: number; connected: boolean; usd?: number; autoFocus?: boolean; disabled?: boolean; error?: string | boolean; note?: string; ariaLabel: string;
 }) {
   return (
-    <div className={cx('well grid gap-1.5 pb-2.5 pl-3.5 pr-3.5 pt-3 ring-inset', error ? 'ring-1 ring-stroke-error/60' : 'focus-within:ring-1 focus-within:ring-stroke-focused')}>
-      <div className="flex items-center gap-2.5">
+    <div className={cx('well grid gap-2 px-4 py-3 ring-inset', error ? 'ring-1 ring-stroke-error/60' : 'focus-within:ring-1 focus-within:ring-stroke-focused')}>
+      <div className="flex items-center gap-3">
         <input
           inputMode="decimal"
           autoComplete="off"
           spellCheck={false}
           autoFocus={autoFocus}
+          disabled={disabled}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="0"
           aria-label={ariaLabel}
-          className="w-0 min-w-0 flex-1 bg-transparent display text-[30px] leading-[1.15] num text-strong placeholder:text-weaker outline-none focus-visible:outline-none"
+          className="w-0 min-w-0 flex-1 bg-transparent display text-3xl leading-9 num text-strong placeholder:text-weaker outline-none focus-visible:outline-none"
         />
-        <span className="inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium">
-          {tokenIcon}
-          {tokenLabel}
-        </span>
+        {picker ?? (
+          <span className="inline-flex items-center gap-2 whitespace-nowrap text-base font-medium">
+            {tokenIcon}
+            {tokenLabel}
+          </span>
+        )}
       </div>
       <div className="flex items-center justify-between gap-2 text-xs num">
         <span className="text-weaker">{usd !== undefined && usd > 0 ? `≈ ${fmtUsd(usd, { compact: false, cents: true })}` : ''}</span>
         {connected && balance !== undefined && (
           <span className="text-weaker">
             Balance {formatAmountSignificant(balance, decimals)}
-            <button onClick={() => onChange(toExactString(balance, decimals))} className="ml-1.5 font-bold text-strong hover:text-accent-bright">Max</button>
+            <button onClick={() => onChange(toExactString(balance, decimals))} className="ml-2 font-bold text-strong hover:text-accent-bright">Max</button>
           </span>
         )}
       </div>
@@ -239,18 +247,89 @@ function AmountBox({
   );
 }
 
+/**
+ * The zap's pay-with token, as a menu: every token the chain has a zap-in route for, each with the
+ * wallet's balance. The chain lists one route token today, so the menu holds one row until it lists more.
+ */
+function TokenPicker({ tokens, balances, value, onChange, connected }: { tokens: TokenMeta[]; balances: bigint[]; value: number; onChange: (i: number) => void; connected: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const current = tokens[value];
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Pay with ${current.symbol}`}
+        className="-mr-2 inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-full px-2 text-base font-medium transition-colors duration-300 ease-dusk hover:bg-background-elevated"
+      >
+        <TokenIcon symbol={current.symbol} size={20} />
+        {current.symbol}
+        <Chevron className={cx('transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Pay with"
+          className="absolute right-0 top-full mt-2 w-60 bg-background-popover border border-stroke-strong rounded-md shadow-pop p-1 animate-fade-in z-40"
+        >
+          {tokens.map((t, i) => (
+            <li key={t.address} role="option" aria-selected={i === value}>
+              <button
+                type="button"
+                onClick={() => { onChange(i); setOpen(false); }}
+                className={cx(
+                  'w-full rounded px-3 py-2 text-left text-base flex items-center gap-2 hover:bg-background-elevated',
+                  i === value ? 'text-strong' : 'text-weak',
+                )}
+              >
+                <TokenIcon symbol={t.symbol} size={20} />
+                <span className="flex-1 min-w-0 truncate">{t.symbol}</span>
+                {connected && <span className="num text-xs text-weaker">{formatAmountSignificant(balances[i] ?? 0n, t.decimals)}</span>}
+                <span className={cx('w-3 text-strong', i !== value && 'invisible')} aria-hidden>✓</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 interface ChoiceOption {
   id: Mode;
   label: string;
   name: string;
   icon: ReactNode;
+  disabled?: boolean;
 }
 
-/** In kind (the whole basket) first — always there; then USDG only, when the zap serves this vault. */
-function modeOptions(v: LiveVault, route: ZapRoute | undefined): ChoiceOption[] {
+/**
+ * The whole basket in kind first, "Both" or "All" — always there; then the zap's one token ("USDG")
+ * while the chain confirms its route and once it has. A vault the zap does not serve (or whose probe
+ * failed) keeps only the in-kind key.
+ * USDG is drawn from the start of the probe, so the groove never opens on a lone full-width key and
+ * then splits; it stays unpickable until the route is confirmed.
+ */
+function modeOptions(v: LiveVault, route: ZapRoute | undefined, pending: boolean): ChoiceOption[] {
   const symbols = v.tokens.map((t) => t.symbol);
-  const out: ChoiceOption[] = [{ id: 'basket', label: 'In kind', name: symbols.join(' + '), icon: <TokenGroup symbols={symbols} size={18} /> }];
-  if (route) out.push({ id: 'zap', label: `${route.token.symbol} only`, name: `${route.token.symbol} only, through the zap`, icon: <TokenIcon symbol={route.token.symbol} size={18} /> });
+  const out: ChoiceOption[] = [{ id: 'basket', label: symbols.length === 2 ? 'Both' : 'All', name: symbols.map(displaySymbol).join(' + '), icon: <TokenGroup symbols={symbols} size={18} /> }];
+  if (route || pending) {
+    const symbol = route?.token.symbol ?? ZAP_ROUTE_SYMBOL;
+    out.push({ id: 'zap', label: symbol, name: `${symbol} only, through the zap`, icon: <TokenIcon symbol={symbol} size={18} />, disabled: !route });
+  }
   return out;
 }
 
@@ -268,11 +347,12 @@ function TokenChoice({ options, value, onChange }: { options: ChoiceOption[]; va
         <button
           key={o.id}
           onClick={() => onChange(o.id)}
+          disabled={o.disabled}
           aria-pressed={value === o.id}
           title={o.name === o.label ? undefined : o.name}
           className={cx(
-            'inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap text-sm font-medium transition-colors duration-300 ease-dusk',
-            value === o.id ? 'text-strong' : 'text-weak hover:text-strong',
+            'inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap text-base font-medium transition-colors duration-300 ease-dusk',
+            value === o.id ? 'text-strong' : o.disabled ? 'text-weak cursor-default' : 'text-weak hover:text-strong',
           )}
         >
           {o.icon}
@@ -286,7 +366,7 @@ function TokenChoice({ options, value, onChange }: { options: ChoiceOption[]; va
 /** The percent box inside the details fold. */
 function SlippageField({ value, onChange, ariaLabel }: { value: string; onChange: (s: string) => void; ariaLabel: string }) {
   return (
-    <span className="inline-flex items-center rounded border border-stroke-weak bg-background-elevated px-1.5 h-7">
+    <span className="inline-flex items-center rounded border border-stroke-weak bg-background-elevated px-2 h-7">
       <input
         inputMode="decimal"
         value={value}
@@ -301,7 +381,7 @@ function SlippageField({ value, onChange, ariaLabel }: { value: string; onChange
 
 function Row({ k, v }: { k: ReactNode; v: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-2.5 py-[5px]">
+    <div className="flex items-center justify-between gap-3 py-1">
       <dt className="text-weaker">{k}</dt>
       <dd className="text-right text-strong">{v}</dd>
     </div>
@@ -336,19 +416,66 @@ function useWriteGate(v: LiveVault) {
 
 // ───────────────────────── Deposit ─────────────────────────
 
-function DepositForm({ ctx, route, initialAmount }: { ctx: FormContext; route: ZapRoute | undefined; initialAmount?: string }) {
-  const [mode, setMode] = useState<Mode>('basket');
-  const options = modeOptions(ctx.vault, route);
-  const active = route && mode === 'zap' ? 'zap' : 'basket';
+function DepositForm({ ctx, route, pending, initialAmount }: { ctx: FormContext; route: ZapRoute | undefined; pending: boolean; initialAmount?: string }) {
+  // USDG only by default. While the chain confirms the route, the zap form's shape shows with nothing
+  // to type into, so no amount is lost and nothing moves when it lands; a vault the zap does not
+  // serve opens on the in-kind form.
+  const [mode, setMode] = useState<Mode>('zap');
+  const options = modeOptions(ctx.vault, route, pending);
+  const active = mode === 'zap' && (route || pending) ? 'zap' : 'basket';
   const choice = (
     <Field label="Pay with">
       <TokenChoice options={options} value={active} onChange={setMode} />
     </Field>
   );
-  return active === 'zap' && route ? (
-    <ZapDepositForm key="zap" ctx={ctx} route={route} choice={choice} initialAmount={initialAmount} />
+  if (active === 'basket') return <BasketDepositForm key="basket" ctx={ctx} choice={choice} />;
+  return route ? (
+    <ZapDepositForm key="zap" ctx={ctx} routes={[route]} choice={choice} initialAmount={initialAmount} />
   ) : (
-    <BasketDepositForm key="basket" ctx={ctx} choice={choice} />
+    <ZapPendingForm key="zap-pending" ctx={ctx} choice={choice} />
+  );
+}
+
+/** What the zap does, under both the zap form and its pending shape. */
+const ZAP_EXPLAINER =
+  'The zap buys the other basket tokens on the route pool (TWAP-guarded), then makes the normal in-kind deposit — the vault itself never swaps. Leftovers come back to your wallet.';
+
+/** The zap deposit form's shape while the chain confirms the route: nothing to type into or press yet. */
+function ZapPendingForm({ ctx: { vault: v, nav }, choice }: { ctx: FormContext; choice: ReactNode }) {
+  return (
+    <div className="grid gap-4">
+      {choice}
+
+      <Field label="Amount">
+        <AmountBox
+          value=""
+          onChange={() => {}}
+          tokenLabel={ZAP_ROUTE_SYMBOL}
+          tokenIcon={<TokenIcon symbol={ZAP_ROUTE_SYMBOL} size={20} />}
+          decimals={0}
+          connected={false}
+          disabled
+          ariaLabel={`${ZAP_ROUTE_SYMBOL} amount`}
+        />
+      </Field>
+
+      <Field label="You receive">
+        <div className="flex items-baseline justify-between gap-3 border-t border-stroke-strong pt-3 num">
+          <span className="display num truncate text-2xl text-weaker">
+            0 <span className="ml-0.5 text-base font-normal text-weak">{v.receipt.symbol}</span>
+          </span>
+        </div>
+      </Field>
+
+      <Button block variant="accent" disabled loading>
+        Checking the {ZAP_ROUTE_SYMBOL} route…
+      </Button>
+
+      <div className="text-xs num">
+        <div className="py-0.5 text-weaker">1 {v.receipt.symbol} = {nav === undefined ? '—' : fmtPrice(nav)} · spot</div>
+        <p className="mt-3 text-xs leading-normal text-weaker">{ZAP_EXPLAINER}</p>
+      </div>
+    </div>
   );
 }
 
@@ -438,7 +565,7 @@ function BasketDepositForm({ ctx, choice }: { ctx: FormContext; choice: ReactNod
       preview.refetch();
       pushToast({
         title: 'Deposit confirmed',
-        detail: `Minted ${formatAmountSignificant(shares, v.decimals)} ${v.receipt.symbol} from ${v.entry?.label ?? 'the vault'} on ${chainLabel(v.chainId)}`,
+        detail: `Minted ${formatAmountSignificant(shares, v.decimals)} ${v.receipt.symbol} from ${vaultName(v)} on ${chainLabel(v.chainId)}`,
         tone: 'success',
       });
     } catch (err) {
@@ -495,9 +622,9 @@ function BasketDepositForm({ ctx, choice }: { ctx: FormContext; choice: ReactNod
       </Field>
 
       <Field label="You receive">
-        <div className="flex items-baseline justify-between gap-2.5 border-t border-stroke-strong pt-3 num">
-          <span className={cx('display num truncate text-[26px] leading-8', preview.shares !== undefined ? 'text-strong' : 'text-weaker')}>
-            {preview.shares !== undefined ? formatAmountSignificant(preview.shares, v.decimals) : '0'} <span className="ml-0.5 text-sm font-normal text-weak">{v.receipt.symbol}</span>
+        <div className="flex items-baseline justify-between gap-3 border-t border-stroke-strong pt-3 num">
+          <span className={cx('display num truncate text-2xl', preview.shares !== undefined ? 'text-strong' : 'text-weaker')}>
+            {preview.shares !== undefined ? formatAmountSignificant(preview.shares, v.decimals) : '0'} <span className="ml-0.5 text-base font-normal text-weak">{v.receipt.symbol}</span>
           </span>
           {sharesUsd !== undefined && <span className="text-xs text-weaker shrink-0">≈ {fmtUsd(sharesUsd, { compact: false, cents: true })}</span>}
         </div>
@@ -513,12 +640,12 @@ function BasketDepositForm({ ctx, choice }: { ctx: FormContext; choice: ReactNod
       {footer}
 
       <div className="text-xs num">
-        <button onClick={() => setDetails(!details)} aria-expanded={details} className="w-full flex items-center justify-between gap-2.5 py-0.5 text-left text-weaker hover:text-weak">
+        <button onClick={() => setDetails(!details)} aria-expanded={details} className="w-full flex items-center justify-between gap-3 py-0.5 text-left text-weaker hover:text-weak">
           <span>1 {v.receipt.symbol} = {nav === undefined ? '—' : fmtPrice(nav)} · spot</span>
           <Chevron className={cx('transition-transform', details && 'rotate-180')} />
         </button>
         {details && (
-          <dl className="mt-1.5 grid animate-fade-in">
+          <dl className="mt-2 grid animate-fade-in">
             <Row k="Slippage tolerance" v={<SlippageField value={slippage} onChange={setSlippage} ariaLabel="Slippage tolerance in percent" />} />
             <Row k="Minimum received" v={slip.ok ? `${formatAmountSignificant(minShares, v.decimals)} ${v.receipt.symbol}` : <span className="text-error">{slip.error}</span>} />
             <Row k="Offers" v="Maximums · only what is required is pulled" />
@@ -532,11 +659,13 @@ function BasketDepositForm({ ctx, choice }: { ctx: FormContext; choice: ReactNod
   );
 }
 
-function ZapDepositForm({ ctx, route, choice, initialAmount }: { ctx: FormContext; route: ZapRoute; choice: ReactNode; initialAmount?: string }) {
+function ZapDepositForm({ ctx, routes, choice, initialAmount }: { ctx: FormContext; routes: ZapRoute[]; choice: ReactNode; initialAmount?: string }) {
   const { vault: v, user, usdPrices, nav } = ctx;
   const { write } = useWallet();
   const pushToast = useStore((s) => s.pushToast);
   const { address, gate, loading, footer } = useWriteGate(v);
+  const [picked, setPicked] = useState(0);
+  const route = routes[picked] ?? routes[0];
   const token = route.token;
 
   const [value, setValue] = useState(initialAmount ?? '');
@@ -614,7 +743,7 @@ function ZapDepositForm({ ctx, route, choice, initialAmount }: { ctx: FormContex
       preview.refetch();
       pushToast({
         title: 'Zap deposit confirmed',
-        detail: `Minted ${formatAmountSignificant(shares, v.decimals)} ${v.receipt.symbol} from ${formatAmount(amountIn, token.decimals, 6)} ${token.symbol} into ${v.entry?.label ?? 'the vault'} on ${chainLabel(v.chainId)}`,
+        detail: `Minted ${formatAmountSignificant(shares, v.decimals)} ${v.receipt.symbol} from ${formatAmount(amountIn, token.decimals, 6)} ${token.symbol} into ${vaultName(v)} on ${chainLabel(v.chainId)}`,
         tone: 'success',
       });
     } catch (err) {
@@ -650,7 +779,15 @@ function ZapDepositForm({ ctx, route, choice, initialAmount }: { ctx: FormContex
           value={value}
           onChange={(s) => { setValue(s); setResult(null); }}
           tokenLabel={token.symbol}
-          tokenIcon={<TokenIcon symbol={token.symbol} size={20} />}
+          picker={
+            <TokenPicker
+              tokens={routes.map((r) => r.token)}
+              balances={routes.map((r) => user.balances[r.index] ?? 0n)}
+              value={picked}
+              onChange={(i) => { if (i !== picked) { setPicked(i); setValue(''); setResult(null); setError(null); } }}
+              connected={Boolean(address)}
+            />
+          }
           balance={balance}
           decimals={token.decimals}
           connected={Boolean(address)}
@@ -663,9 +800,9 @@ function ZapDepositForm({ ctx, route, choice, initialAmount }: { ctx: FormContex
       </Field>
 
       <Field label="You receive">
-        <div className="flex items-baseline justify-between gap-2.5 border-t border-stroke-strong pt-3 num">
-          <span className={cx('display num truncate text-[26px] leading-8', preview.shares !== undefined ? 'text-strong' : 'text-weaker')}>
-            {preview.shares !== undefined ? formatAmountSignificant(preview.shares, v.decimals) : '0'} <span className="ml-0.5 text-sm font-normal text-weak">{v.receipt.symbol}</span>
+        <div className="flex items-baseline justify-between gap-3 border-t border-stroke-strong pt-3 num">
+          <span className={cx('display num truncate text-2xl', preview.shares !== undefined ? 'text-strong' : 'text-weaker')}>
+            {preview.shares !== undefined ? formatAmountSignificant(preview.shares, v.decimals) : '0'} <span className="ml-0.5 text-base font-normal text-weak">{v.receipt.symbol}</span>
           </span>
           {sharesUsd !== undefined && <span className="text-xs text-weaker shrink-0">≈ {fmtUsd(sharesUsd, { compact: false, cents: true })}</span>}
         </div>
@@ -687,12 +824,12 @@ function ZapDepositForm({ ctx, route, choice, initialAmount }: { ctx: FormContex
       {footer}
 
       <div className="text-xs num">
-        <button onClick={() => setDetails(!details)} aria-expanded={details} className="w-full flex items-center justify-between gap-2.5 py-0.5 text-left text-weaker hover:text-weak">
+        <button onClick={() => setDetails(!details)} aria-expanded={details} className="w-full flex items-center justify-between gap-3 py-0.5 text-left text-weaker hover:text-weak">
           <span>1 {v.receipt.symbol} = {nav === undefined ? '—' : fmtPrice(nav)} · spot</span>
           <Chevron className={cx('transition-transform', details && 'rotate-180')} />
         </button>
         {details && (
-          <dl className="mt-1.5 grid animate-fade-in">
+          <dl className="mt-2 grid animate-fade-in">
             {kept !== undefined && bought.length > 0 && (
               <Row k="Auto-swap" v={`${formatAmount(amountIn - kept, token.decimals, 6)} ${token.symbol} → ${bought.map((x) => `${formatAmount(x.amount, x.t.decimals, 6)} ${x.t.symbol}`).join(' + ')}`} />
             )}
@@ -702,15 +839,13 @@ function ZapDepositForm({ ctx, route, choice, initialAmount }: { ctx: FormContex
             <Row k="Lock-up" v="None · redeem anytime" />
           </dl>
         )}
-        {slip.ok && slip.clamped && <p className="mt-1.5 text-2xs text-warning">Capped at the route limit of {ZAP_MAX_SLIPPAGE_BPS / 100}%.</p>}
+        {slip.ok && slip.clamped && <p className="mt-2 text-2xs text-warning">Capped at the route limit of {ZAP_MAX_SLIPPAGE_BPS / 100}%.</p>}
         {slip.ok && slip.bps > 0 && legBps === 0 && (
-          <p className="mt-1.5 text-2xs text-weaker">
+          <p className="mt-2 text-2xs text-weaker">
             A route pool charges {route.routeFeeBps / 100}% — above your tolerance — so each swap leg uses its route’s own cap; your tolerance still bounds the minimum.
           </p>
         )}
-        <p className="mt-3 text-xs leading-normal text-weaker">
-          The zap buys the other basket tokens on the route pool (TWAP-guarded), then makes the normal in-kind deposit — the vault itself never swaps. Leftovers come back to your wallet.
-        </p>
+        <p className="mt-3 text-xs leading-normal text-weaker">{ZAP_EXPLAINER}</p>
       </div>
     </div>
   );
@@ -718,9 +853,9 @@ function ZapDepositForm({ ctx, route, choice, initialAmount }: { ctx: FormContex
 
 // ───────────────────────── Withdraw ─────────────────────────
 
-function WithdrawForm({ ctx, route }: { ctx: FormContext; route: ZapRoute | undefined }) {
+function WithdrawForm({ ctx, route, pending }: { ctx: FormContext; route: ZapRoute | undefined; pending: boolean }) {
   const [mode, setMode] = useState<Mode>('basket');
-  const options = modeOptions(ctx.vault, route);
+  const options = modeOptions(ctx.vault, route, pending);
   const active = route && mode === 'zap' ? 'zap' : 'basket';
   const choice = (
     <Field label="Receive in">
@@ -782,7 +917,7 @@ function BasketWithdrawForm({ ctx, choice }: { ctx: FormContext; choice: ReactNo
       user.refetch();
       pushToast({
         title: 'Withdrawal confirmed',
-        detail: `Burned ${formatAmountSignificant(shares, v.decimals)} ${v.receipt.symbol} from ${v.entry?.label ?? 'the vault'} on ${chainLabel(v.chainId)}`,
+        detail: `Burned ${formatAmountSignificant(shares, v.decimals)} ${v.receipt.symbol} from ${vaultName(v)} on ${chainLabel(v.chainId)}`,
         tone: 'success',
       });
     } catch (err) {
@@ -813,8 +948,8 @@ function BasketWithdrawForm({ ctx, choice }: { ctx: FormContext; choice: ReactNo
         <SharesBox ctx={ctx} value={value} onChange={(s) => { setValue(s); setReceived(null); }} error={parseError ?? (tooMany ? 'More than you hold' : undefined)} connected={Boolean(address)} />
       </Field>
       <Field label="Receive">
-        <div className="grid gap-1.5 border-t border-stroke-strong pt-3 num">
-          <div className="display num text-[22px] leading-8 text-strong">
+        <div className="grid gap-2 border-t border-stroke-strong pt-3 num">
+          <div className="display num text-2xl text-strong">
             {owed ? v.tokens.map((t, i) => `${formatAmount(owed[i] ?? 0n, t.decimals, 6)} ${t.symbol}`).join(' + ') : <span className="text-weaker">0</span>}
           </div>
           <div className="text-xs text-weaker">{owed && owedUsd !== undefined ? `≈ ${fmtUsd(owedUsd, { compact: false, cents: true })} at spot · no withdrawal fee` : 'No lock-up. Redeem anytime, in kind.'}</div>
@@ -909,7 +1044,7 @@ function ZapWithdrawForm({ ctx, route, choice }: { ctx: FormContext; route: ZapR
       refetchAllowance();
       pushToast({
         title: 'Zap withdrawal confirmed',
-        detail: `Burned ${formatAmountSignificant(shares, v.decimals)} ${v.receipt.symbol} for ${formatAmount(amountOut, token.decimals, 6)} ${token.symbol} from ${v.entry?.label ?? 'the vault'} on ${chainLabel(v.chainId)}`,
+        detail: `Burned ${formatAmountSignificant(shares, v.decimals)} ${v.receipt.symbol} for ${formatAmount(amountOut, token.decimals, 6)} ${token.symbol} from ${vaultName(v)} on ${chainLabel(v.chainId)}`,
         tone: 'success',
       });
     } catch (err) {
@@ -937,8 +1072,8 @@ function ZapWithdrawForm({ ctx, route, choice }: { ctx: FormContext; route: ZapR
         <SharesBox ctx={ctx} value={value} onChange={(s) => { setValue(s); setReceived(null); }} error={parsed && !parsed.ok ? parsed.error : undefined} connected={Boolean(address)} />
       </Field>
       <Field label="Receive">
-        <div className="grid gap-1.5 border-t border-stroke-strong pt-3 num">
-          <div className="display num text-[22px] leading-8 text-strong">
+        <div className="grid gap-2 border-t border-stroke-strong pt-3 num">
+          <div className="display num text-2xl text-strong">
             {preview.amountOut !== undefined ? `${formatAmount(preview.amountOut, token.decimals, 6)} ${token.symbol}` : <span className="text-weaker">0</span>}
           </div>
           <div className="text-xs text-weaker">
@@ -956,17 +1091,17 @@ function ZapWithdrawForm({ ctx, route, choice }: { ctx: FormContext; route: ZapR
       </Button>
       {footer}
       <div className="text-xs num">
-        <button onClick={() => setDetails(!details)} aria-expanded={details} className="w-full flex items-center justify-between gap-2.5 py-0.5 text-left text-weaker hover:text-weak">
+        <button onClick={() => setDetails(!details)} aria-expanded={details} className="w-full flex items-center justify-between gap-3 py-0.5 text-left text-weaker hover:text-weak">
           <span>Minimum {slip.ok ? `${formatAmount(minOut, token.decimals, 6)} ${token.symbol}` : '—'}</span>
           <Chevron className={cx('transition-transform', details && 'rotate-180')} />
         </button>
         {details && (
-          <dl className="mt-1.5 grid animate-fade-in">
+          <dl className="mt-2 grid animate-fade-in">
             <Row k="Slippage tolerance" v={<SlippageField value={slippage} onChange={setSlippage} ariaLabel="Zap withdraw slippage tolerance in percent" />} />
             <Row k="Minimum received" v={slip.ok ? `${formatAmount(minOut, token.decimals, 6)} ${token.symbol}` : <span className="text-error">{slip.error}</span>} />
           </dl>
         )}
-        {slip.ok && slip.clamped && <p className="mt-1.5 text-2xs text-warning">Capped at the route limit of {ZAP_MAX_SLIPPAGE_BPS / 100}%.</p>}
+        {slip.ok && slip.clamped && <p className="mt-2 text-2xs text-warning">Capped at the route limit of {ZAP_MAX_SLIPPAGE_BPS / 100}%.</p>}
       </div>
     </div>
   );

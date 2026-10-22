@@ -41,7 +41,7 @@ function CardSection() {
       <div className="grid items-start gap-5 md:grid-cols-2">
         <Specimen className="!block" code="<Card>…</Card>">
           <Card>
-            <p className="text-sm text-weak">Fees compound into the position automatically. There is nothing to claim.</p>
+            <p className="text-base text-weak">Fees compound into the position automatically. There is nothing to claim.</p>
           </Card>
         </Specimen>
         <Specimen className="!block" code='<Card title="Adapters" action={…} padded={false}>'>
@@ -316,7 +316,7 @@ function ChainLogoSection() {
       <Specimen className="gap-x-9" code='<ChainLogo chain="robinhood" size={24} />'>
         {(['robinhood', 'ethereum', 'arc'] as const).map((c) => (
           <div key={c} className="grid justify-items-start gap-2">
-            <span className="flex items-end gap-2.5"><ChainLogo chain={c} size={16} /><ChainLogo chain={c} size={24} /><ChainLogo chain={c} size={36} /></span>
+            <span className="flex items-end gap-3"><ChainLogo chain={c} size={16} /><ChainLogo chain={c} size={24} /><ChainLogo chain={c} size={36} /></span>
             <span className="font-mono text-2xs text-weaker">{c}</span>
           </div>
         ))}
@@ -335,8 +335,8 @@ function BoostedAprSection() {
       lede="An APR that includes rewards: the number in the text colour, marked with a small spark in the sun colour. The spark scales with the text, so it works at any size."
     >
       <Specimen align="baseline" className="gap-x-10" code='<BoostedApr value="40.0%" />'>
-        <span className="text-sm"><BoostedApr value="32.6%" /></span>
-        <span className="display num text-[22px] leading-7"><BoostedApr value="40.0%" /></span>
+        <span className="text-base"><BoostedApr value="32.6%" /></span>
+        <span className="display num text-2xl"><BoostedApr value="40.0%" /></span>
         <span className="display num text-4xl"><BoostedApr value="40.0%" /></span>
       </Specimen>
     </Section>

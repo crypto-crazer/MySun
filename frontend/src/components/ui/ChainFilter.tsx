@@ -12,19 +12,19 @@ export function ChainFilter({ value, onChange }: { value: ChainId | 'all'; onCha
     ...ORDER.map((id) => ({ id, label: CHAINS[id].name, isNew: CHAINS[id].isNew })),
   ];
   return (
-    <div className="flex flex-wrap gap-0.5 text-sm" role="group" aria-label="Network">
+    <div className="flex flex-wrap gap-0.5 text-base" role="group" aria-label="Network">
       {options.map((o) => (
         <button
           key={o.id}
           onClick={() => onChange(o.id)}
           aria-pressed={value === o.id}
           className={cx(
-            'relative inline-flex items-baseline gap-1.5 px-2.5 py-2 transition-colors',
-            value === o.id ? 'text-strong after:absolute after:inset-x-2.5 after:bottom-0 after:h-px after:bg-strong' : 'text-weaker hover:text-strong',
+            'relative inline-flex items-baseline gap-2 px-3 py-2 transition-colors',
+            value === o.id ? 'text-strong after:absolute after:inset-x-3 after:bottom-0 after:h-px after:bg-strong' : 'text-weaker hover:text-strong',
           )}
         >
           {o.label}
-          {o.isNew && <span className="text-[9.5px] uppercase tracking-[0.1em] text-accent">New</span>}
+          {o.isNew && <span className="text-2xs uppercase tracking-[0.1em] text-accent">New</span>}
         </button>
       ))}
     </div>

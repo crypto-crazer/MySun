@@ -30,7 +30,7 @@ export function Segmented<T extends string>({ value, onChange, options, size = '
           onClick={() => onChange(o.value)}
           className={cx(
             'transition-colors duration-300 ease-dusk whitespace-nowrap disabled:opacity-40',
-            size === 'sm' ? 'h-7 px-3 text-xs' : 'h-8 px-3 text-sm',
+            size === 'sm' ? 'h-7 px-3 text-xs' : 'h-8 px-3 text-base',
             value === o.value ? 'text-strong' : 'text-weak hover:text-strong',
           )}
         >
@@ -51,7 +51,7 @@ export function UnderlineTabs<T extends string>({ value, onChange, options, clas
           aria-selected={value === o.value}
           onClick={() => onChange(o.value)}
           className={cx(
-            'h-11 px-4 text-sm font-medium -mb-px border-b-2 transition-colors',
+            'h-11 px-4 text-base font-medium -mb-px border-b-2 transition-colors',
             value === o.value ? 'border-stroke-selected text-strong' : 'border-transparent text-weaker hover:text-weak',
           )}
         >

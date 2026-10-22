@@ -27,14 +27,14 @@ export function AmountInput({ value, onChange, token, balance, balanceLabel = 'B
           placeholder="0.00"
           className="flex-1 min-w-0 bg-transparent text-lg num text-strong placeholder:text-weaker outline-none"
         />
-        <span className="text-sm text-weak font-medium">{token}</span>
+        <span className="text-base text-weak font-medium">{token}</span>
         {onMax && (
           <button onClick={onMax} className="h-6 px-2 rounded bg-fill-weak text-2xs font-medium text-strong hover:brightness-110">
             Max
           </button>
         )}
       </div>
-      <div className="flex justify-between mt-1.5 text-xs">
+      <div className="flex justify-between mt-2 text-xs">
         <span className={cx(error ? 'text-error' : 'text-weaker')}>{error ?? hint ?? ''}</span>
         {balance !== undefined && (
           <span className="text-weaker num">

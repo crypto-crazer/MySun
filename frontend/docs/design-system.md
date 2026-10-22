@@ -225,16 +225,19 @@ comes from Fontshare; its licence does not allow the files in a public repositor
 
 | Class | Size / line | Use |
 |---|---|---|
-| `text-2xs` | 11 / 14 | Eyebrows, badges |
-| `text-xs` | 12 / 16 | Captions, hints, chart ticks |
-| `text-sm` | 13 / 18 | Supporting text, compact buttons |
-| `text-base` | 14 / 20 | Body, the default button |
-| `text-md` | 15 / 22 | Large button, dialog title |
-| `text-lg` | 17 / 24 | Amount being typed |
-| `text-xl` | 20 / 26 | Sub-headings |
-| `text-2xl` | 24 / 30 | Section titles |
-| `text-3xl` | 30 / 36 | A large reading |
-| `text-4xl` | 38 / 44 | The reading a page is about |
+| `text-2xs` | 10 / 12 | Eyebrows, badges, chart ticks |
+| `text-xs` | 12 / 16 | Captions, hints |
+| `text-base` | 14 / 20 | Body, supporting text, buttons |
+| `text-md` | 16 / 24 | Large button, dialog title |
+| `text-lg` | 18 / 24 | Amount being typed |
+| `text-xl` | 20 / 28 | Sub-headings |
+| `text-2xl` | 24 / 32 | Section titles |
+| `text-3xl` | 32 / 40 | A large reading |
+| `text-4xl` | 40 / 48 | The reading a page is about |
+
+Sizes are even and line heights sit on the 4px grid. This is the whole scale: Tailwind's own sizes are
+replaced, so there is no `text-sm`. Supporting text is `text-base` in a weaker colour, not a size down.
+A one-off reading takes the nearest step rather than an arbitrary `text-[22px]`.
 
 ### Weights
 
@@ -311,7 +314,9 @@ Not named yet; these are the values in use. A new layer takes its place in this 
 
 - `wrap` is the page container: at most 1280px, with a side gutter of `clamp(16px, 4vw, 56px)`. The
   header, every page and the footer use it. A page sets its own width, so a band can run edge to edge.
-- Spacing is Tailwind's 4px scale, untouched.
+- Spacing is Tailwind's 4px scale without its half steps: `1.5`, `2.5` and `3.5` (6, 10, 14px) do not
+  exist. `0.5` (2px) stays for a nudge. A control's own geometry (the toggle's knob, a tick hanging from
+  the ruler) may still take an exact pixel value.
 - Breakpoints in use: `sm` 640px, `md` 768px, `lg` 1024px.
 
 ## Focus
@@ -367,9 +372,9 @@ All variants press 1px down on `:active`. For a warning state on a secondary but
 
 | Size | Class | Height | Use |
 |---|---|---|---|
-| `xs` | `h-7 px-2.5 text-xs`, radius 8px | 28px | Inside a panel header (the price range's flip control) |
-| `sm` | `h-9 px-3 text-sm` | 36px | The header, rows |
-| `md` | `h-11 px-[18px] text-base` | 44px (default) | |
+| `xs` | `h-7 px-2 text-xs`, radius 8px | 28px | Inside a panel header (the price range's flip control) |
+| `sm` | `h-9 px-3 text-base` | 36px | The header, rows |
+| `md` | `h-11 px-4 text-base` | 44px (default) | |
 | `lg` | `h-12 px-5 text-md` | 48px | |
 
 `loading` disables the button and opens a slot before the label for the spinner, so the button widens

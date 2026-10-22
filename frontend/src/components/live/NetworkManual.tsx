@@ -25,7 +25,7 @@ export function NetworkManual({ chainId }: { chainId: number }) {
   return (
     <details className="text-2xs text-weaker">
       <summary className="cursor-pointer select-none hover:text-weak">Trouble switching? Add the network by hand</summary>
-      <dl className="mt-1.5 space-y-0.5">
+      <dl className="mt-2 space-y-0.5">
         {rows.map(([label, value]) => (
           <div key={label} className="flex items-baseline gap-2">
             <dt className="w-28 shrink-0">{label}</dt>
@@ -34,7 +34,7 @@ export function NetworkManual({ chainId }: { chainId: number }) {
         ))}
       </dl>
       {movableRpc && (
-        <p className="mt-1.5 leading-snug">
+        <p className="mt-2 leading-snug">
           Already added this network to your wallet? Update its RPC URL to the one above — the demo stack's LAN address
           changes with the network.
         </p>

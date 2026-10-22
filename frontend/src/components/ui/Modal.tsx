@@ -24,7 +24,7 @@ export function Modal({ open, onClose, title, children, footer }: Props) {
         <header className="px-5 h-12 flex items-center border-b border-stroke-weak">
           <h2 className="display text-md">{title}</h2>
         </header>
-        <div className="px-5 py-4 text-sm text-weak leading-relaxed">{children}</div>
+        <div className="px-5 py-4 text-base text-weak leading-relaxed">{children}</div>
         {footer && <footer className="px-5 py-3 border-t border-stroke-weak flex justify-end gap-2">{footer}</footer>}
       </div>
     </div>,

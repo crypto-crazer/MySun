@@ -25,10 +25,9 @@ export function FoundationContent() {
 // ── Typography ────────────────────────────────────────────────────────
 
 const SCALE: Array<{ cls: string; use: string }> = [
-  { cls: 'text-2xs', use: 'Eyebrows, badges' },
-  { cls: 'text-xs', use: 'Captions, hints, chart ticks' },
-  { cls: 'text-sm', use: 'Supporting text, compact buttons' },
-  { cls: 'text-base', use: 'Body, the default button' },
+  { cls: 'text-2xs', use: 'Eyebrows, badges, chart ticks' },
+  { cls: 'text-xs', use: 'Captions, hints' },
+  { cls: 'text-base', use: 'Body, supporting text, buttons' },
   { cls: 'text-md', use: 'Large button, dialog title' },
   { cls: 'text-lg', use: 'Amount being typed' },
   { cls: 'text-xl', use: 'Sub-headings' },
@@ -74,7 +73,7 @@ function Typography() {
         <div className="divide-y divide-stroke-weak border-y border-stroke-weak">
           <Role cls=".title" note="Page-level titles: the serif, light, tight"><span className="title text-2xl">Vault token price</span></Role>
           <Role cls=".display" note="UI titles, a size down, and the deposits total on Earn: the same serif, light"><span className="display text-md">Price range</span></Role>
-          <Role cls=".display.num" note="A reading: the sans stack at regular, so the figures are Switzer"><span className="display num text-[22px] leading-7">$2.4M</span></Role>
+          <Role cls=".display.num" note="A reading: the sans stack at regular, so the figures are Switzer"><span className="display num text-2xl">$2.4M</span></Role>
           <Role cls=".eyebrow" note="The small caps label that names a reading"><span className="eyebrow">Total TVL</span></Role>
         </div>
       </SubSection>
@@ -110,10 +109,10 @@ function Typography() {
 function Family({ name, cls, role, children }: { name: string; cls: string; role: string; children: ReactNode }) {
   return (
     <div className="grid items-center gap-x-10 gap-y-4 py-6 md:grid-cols-[220px_minmax(0,1fr)]">
-      <div className="grid gap-1.5">
+      <div className="grid gap-2">
         <h4 className="display text-md">{name}</h4>
         <code className="font-mono text-xs text-weaker">{cls}</code>
-        <p className="text-sm text-weak">{role}</p>
+        <p className="text-base text-weak">{role}</p>
       </div>
       <div className="min-w-0">{children}</div>
     </div>
@@ -122,10 +121,10 @@ function Family({ name, cls, role, children }: { name: string; cls: string; role
 
 function Role({ cls, note, children }: { cls: string; note: string; children: ReactNode }) {
   return (
-    <div className="grid items-baseline gap-x-10 gap-y-1.5 py-3.5 md:grid-cols-[220px_minmax(0,1fr)]">
+    <div className="grid items-baseline gap-x-10 gap-y-2 py-4 md:grid-cols-[220px_minmax(0,1fr)]">
       <div className="grid gap-0.5">
         <code className="font-mono text-xs text-strong">{cls}</code>
-        <span className="text-sm text-weaker">{note}</span>
+        <span className="text-base text-weaker">{note}</span>
       </div>
       <div className="min-w-0">{children}</div>
     </div>
@@ -152,7 +151,7 @@ function ScaleRow({ cls, use }: { cls: string; use: string }) {
 function WeightTile({ cls, face = 'font-sans', note }: { cls: string; face?: string; note: string }) {
   const [ref, [weight]] = useComputed<HTMLSpanElement>(['font-weight']);
   return (
-    <div className="grid content-start gap-1.5 border-t border-stroke-strong pt-3">
+    <div className="grid content-start gap-2 border-t border-stroke-strong pt-3">
       <span ref={ref} className={cx(cls, face, 'text-3xl text-strong')}>Aa</span>
       <code className="font-mono text-xs text-strong">{cls} <span className="text-weaker">{weight}</span></code>
       <span className="text-xs text-weaker">{note}</span>
@@ -228,7 +227,7 @@ function SemanticColors() {
       </SubSection>
 
       {SEMANTIC_GROUPS.map((g) => (
-        <SubSection key={g.id} title={g.title} note={<>{g.note}<span className="mt-1.5 block font-mono text-xs text-weak">{g.utilities}</span></>}>
+        <SubSection key={g.id} title={g.title} note={<>{g.note}<span className="mt-2 block font-mono text-xs text-weak">{g.utilities}</span></>}>
           <div className="divide-y divide-stroke-weak border-y border-stroke-weak">
             {g.tokens.map((t) => <TokenRow key={t.name} group={g} token={t} />)}
           </div>
@@ -246,13 +245,13 @@ const UTILITY: Record<SemanticGroup['id'], string> = { content: 'text', backgrou
 function TokenRow({ group, token }: { group: SemanticGroup; token: SemanticToken }) {
   const cls = token.cssOnly ? `--color-${token.name}` : `${UTILITY[group.id]}-${token.name}`;
   return (
-    <div className="grid grid-cols-[48px_minmax(0,1fr)] items-center gap-x-4 gap-y-0.5 py-2.5 md:grid-cols-[48px_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.6fr)]">
+    <div className="grid grid-cols-[48px_minmax(0,1fr)] items-center gap-x-4 gap-y-0.5 py-3 md:grid-cols-[48px_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.6fr)]">
       <TokenChip group={group.id} token={token} />
       <code className="font-mono text-xs text-strong [overflow-wrap:anywhere]">{cls}</code>
       <span className="col-start-2 font-mono text-xs text-weaker md:col-start-3">
         {token.ref} · {primitiveHex(token.ref)}{token.alpha !== undefined && ` at ${token.alpha * 100}%`}
       </span>
-      <span className="col-start-2 text-sm text-weak md:col-start-4">{token.use}</span>
+      <span className="col-start-2 text-base text-weak md:col-start-4">{token.use}</span>
     </div>
   );
 }
@@ -355,7 +354,7 @@ function Shape() {
       <SubSection title="The rule">
         <Specimen className="justify-center gap-x-12 !py-10">
           <Mark size={88} className="text-strong" />
-          <p className="max-w-[40ch] text-sm text-weak">
+          <p className="max-w-[40ch] text-base text-weak">
             The sun in the mark is the price. In the mark, in a chart and in a control, a circle means the same thing.
           </p>
         </Specimen>
@@ -387,7 +386,7 @@ function RadiusTile({ cls, note }: { cls: string; note: string }) {
 
 // ── Spacing & layout ──────────────────────────────────────────────────
 
-const SPACES = ['w-1', 'w-1.5', 'w-2', 'w-2.5', 'w-3', 'w-3.5', 'w-4', 'w-5', 'w-6', 'w-7', 'w-10', 'w-12'];
+const SPACES = ['w-0.5', 'w-1', 'w-2', 'w-3', 'w-4', 'w-5', 'w-6', 'w-7', 'w-8', 'w-10', 'w-12'];
 
 function Spacing() {
   return (
@@ -395,7 +394,7 @@ function Spacing() {
       id="spacing"
       title="Spacing & layout"
       source="src/index.css"
-      lede="Spacing is Tailwind's 4px scale, untouched. What the system adds is one container and one gutter, shared by the header, every page and the footer."
+      lede="Spacing is Tailwind's 4px scale without its 6, 10 and 14px half steps; 2px stays for a nudge. What the system adds is one container and one gutter, shared by the header, every page and the footer."
     >
       <SubSection title="The container" note={<>Class <Code>wrap</Code>: at most 1280px wide, with a side gutter of <Code>clamp(16px, 4vw, 56px)</Code>. A page sets its own width, so a band can still run edge to edge.</>}>
         <div className="overflow-hidden rounded-lg border border-stroke-weak">
@@ -416,13 +415,13 @@ function Spacing() {
       </SubSection>
 
       <SubSection title="Breakpoints">
-        <div className="divide-y divide-stroke-weak border-y border-stroke-weak text-sm">
+        <div className="divide-y divide-stroke-weak border-y border-stroke-weak text-base">
           {[
             ['sm', '640px', 'The hero scene fills its band; filters sit on one line'],
             ['md', '768px', 'Tables gain their columns; readings hang from one rule'],
             ['lg', '1024px', 'The vault page takes its second column'],
           ].map(([k, v, note]) => (
-            <div key={k} className="grid grid-cols-[56px_72px_minmax(0,1fr)] gap-x-4 py-2.5">
+            <div key={k} className="grid grid-cols-[56px_72px_minmax(0,1fr)] gap-x-4 py-3">
               <code className="font-mono text-xs text-strong">{k}:</code>
               <span className="num font-mono text-xs text-weaker">{v}</span>
               <span className="text-weak">{note}</span>
@@ -464,8 +463,8 @@ function Motion() {
               <div key={e.label} className="grid gap-2">
                 <code className="font-mono text-xs text-weaker">{e.label}</code>
                 <div className="relative pt-4">
-                  <div className={cx('absolute inset-x-0 top-0 transition-transform duration-700', e.cls, moved && 'translate-x-[calc(100%-14px)]')}>
-                    <div className="h-3.5 w-3.5 rounded-circle bg-accent" />
+                  <div className={cx('absolute inset-x-0 top-0 transition-transform duration-700', e.cls, moved && 'translate-x-[calc(100%-16px)]')}>
+                    <div className="h-4 w-4 rounded-circle bg-accent" />
                   </div>
                   <div className="ruler" aria-hidden />
                 </div>
@@ -477,7 +476,7 @@ function Motion() {
       </SubSection>
 
       <SubSection title="Durations">
-        <div className="divide-y divide-stroke-weak border-y border-stroke-weak text-sm">
+        <div className="divide-y divide-stroke-weak border-y border-stroke-weak text-base">
           {[
             ['150ms', 'duration-150', 'A small flip: the toggle knob, a chevron'],
             ['160ms', 'animate-fade-in', 'Something appearing in place: popover, toast, dialog'],
@@ -485,7 +484,7 @@ function Motion() {
             ['450ms', 'animate-slide-in', 'The side sheet arriving from the right'],
             ['2s', 'animate-rise', 'The loader: the sun rising and setting between the stones'],
           ].map(([t, cls, note]) => (
-            <div key={cls} className="grid grid-cols-[56px_minmax(0,1fr)] gap-x-4 gap-y-0.5 py-2.5 md:grid-cols-[56px_200px_minmax(0,1fr)]">
+            <div key={cls} className="grid grid-cols-[56px_minmax(0,1fr)] gap-x-4 gap-y-0.5 py-3 md:grid-cols-[56px_200px_minmax(0,1fr)]">
               <span className="num font-mono text-xs text-strong">{t}</span>
               <code className="font-mono text-xs text-weaker">{cls}</code>
               <span className="col-start-2 text-weak md:col-start-3">{note}</span>
@@ -506,7 +505,7 @@ function Motion() {
       </SubSection>
 
       <SubSection title="Reduced motion">
-        <p className="max-w-[64ch] text-sm text-weak">
+        <p className="max-w-[64ch] text-base text-weak">
           With <Code>prefers-reduced-motion</Code> every transition and animation is cut to an instant by one rule in <Code>src/index.css</Code>. Nothing depends on motion to be understood: a state that animates in is also complete when it is still.
         </p>
       </SubSection>
@@ -516,7 +515,7 @@ function Motion() {
 
 function AnimationTile({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid justify-items-start gap-2.5">
+    <div className="grid justify-items-start gap-3">
       <div className="grid h-14 items-center overflow-hidden">{children}</div>
       <code className="font-mono text-xs text-weaker">{label}</code>
     </div>
@@ -536,16 +535,16 @@ function Marks() {
       <SubSection title="The mark" note="An s with the sun set in its waist. It takes the text colour; the sun keeps its own. The wordmark's s is the mark, so the two never stand side by side.">
         <Specimen align="end" className="gap-x-10">
           {[16, 24, 40, 64].map((s) => (
-            <div key={s} className="grid justify-items-start gap-2.5">
+            <div key={s} className="grid justify-items-start gap-3">
               <Mark size={s} className="text-strong" />
               <span className="num font-mono text-xs text-weaker">{s}px</span>
             </div>
           ))}
-          <div className="grid justify-items-start gap-2.5">
+          <div className="grid justify-items-start gap-3">
             <Wordmark className="h-5 text-strong" />
             <span className="font-mono text-xs text-weaker">wordmark, 20px</span>
           </div>
-          <div className="grid justify-items-start gap-2.5">
+          <div className="grid justify-items-start gap-3">
             <WordmarkZh className="h-5 text-strong" />
             <span className="font-mono text-xs text-weaker">Chinese wordmark, 20px</span>
           </div>
@@ -569,7 +568,7 @@ function Layering() {
       title="Layering"
       lede="The stacking order as the app uses it today. The values are Tailwind's own and are not named yet; a new layer takes its place in this order rather than a larger number."
     >
-      <div className="divide-y divide-stroke-weak border-y border-stroke-weak text-sm">
+      <div className="divide-y divide-stroke-weak border-y border-stroke-weak text-base">
         {[
           ['z-[70]', 'Modal', 'A dialog and its scrim'],
           ['z-50', 'Toast, sheets', 'Toasts; the deposit sheet'],
@@ -578,7 +577,7 @@ function Layering() {
           ['z-20', 'Badge', 'The chain mark on a token pair'],
           ['z-[2] · z-[4]', 'Hero', 'The shade over the scene, then the text over the shade'],
         ].map(([z, name, note]) => (
-          <div key={z} className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-4 gap-y-0.5 py-2.5 md:grid-cols-[110px_140px_minmax(0,1fr)]">
+          <div key={z} className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-4 gap-y-0.5 py-3 md:grid-cols-[110px_140px_minmax(0,1fr)]">
             <code className="num font-mono text-xs text-strong">{z}</code>
             <span className="text-strong">{name}</span>
             <span className="col-start-2 text-weak md:col-start-3">{note}</span>
@@ -602,8 +601,8 @@ function Focus() {
       <Specimen code="button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid; outline-offset: 3px }">
         <Button size="sm">Deposit</Button>
         <Button size="sm" variant="secondary">Withdraw</Button>
-        <a href="#focus" className="text-sm text-accent underline underline-offset-[3px] hover:text-accent-bright">A text link</a>
-        <input aria-label="Example field" placeholder="A field" className="h-9 w-40 rounded border border-stroke-strong bg-fill-recessed px-3 text-sm text-strong outline-none placeholder:text-weaker" />
+        <a href="#focus" className="text-base text-accent underline underline-offset-[3px] hover:text-accent-bright">A text link</a>
+        <input aria-label="Example field" placeholder="A field" className="h-9 w-40 rounded border border-stroke-strong bg-fill-recessed px-3 text-base text-strong outline-none placeholder:text-weaker" />
         <span className="text-xs text-weaker">Press Tab to move through these.</span>
       </Specimen>
     </Section>

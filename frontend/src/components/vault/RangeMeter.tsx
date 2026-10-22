@@ -36,9 +36,9 @@ export function RangeMeter({ price, lower, upper }: { price: number; lower: numb
       {/* the bounds: inner faces sit exactly on the prices */}
       <rect x={pct(g.lower)} y="12" width="5" height="28" transform="translate(-5 0)" className="fill-strong" />
       <rect x={pct(g.upper)} y="12" width="5" height="28" className="fill-strong" />
-      <text x={pct(g.lower)} dx="-9" y="23" textAnchor="end" fontSize="10.5" className="fill-weaker">{fmtQuote(g.lower)}</text>
-      <text x={pct(g.upper)} dx="9" y="23" fontSize="10.5" className="fill-weaker">{fmtQuote(g.upper)}</text>
-      <text x={sunX} y="58" textAnchor={anchor} fontSize="10.5" fontWeight="500" className="fill-accent-bright">{fmtQuote(price)}</text>
+      <text x={pct(g.lower)} dx="-9" y="23" textAnchor="end" fontSize="10" className="fill-weaker">{fmtQuote(g.lower)}</text>
+      <text x={pct(g.upper)} dx="9" y="23" fontSize="10" className="fill-weaker">{fmtQuote(g.upper)}</text>
+      <text x={sunX} y="58" textAnchor={anchor} fontSize="10" fontWeight="500" className="fill-accent-bright">{fmtQuote(price)}</text>
     </svg>
   );
 }

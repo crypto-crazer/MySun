@@ -118,9 +118,9 @@ export function PriceRange({ pairs, className }: Props) {
   return (
     <section className={className} aria-label="Price range">
       <div className="overflow-hidden rounded-lg border border-stroke-strong bg-fill-recessed">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stroke-weak px-4 py-[11px] text-xs text-weaker">
-          <h3 className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-            <b className="display text-sm text-strong">Price range</b>
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stroke-weak px-4 py-3 text-xs text-weaker">
+          <h3 className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <b className="display text-base text-strong">Price range</b>
             <Button
               type="button"
               variant="secondary"
@@ -128,7 +128,7 @@ export function PriceRange({ pairs, className }: Props) {
               onClick={() => setFlipped(!flipped)}
               aria-label={`Priced in ${quote} per ${base}. Switch to ${base} per ${quote}`}
             >
-              <span className="inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-2">
                 {quote} per {base}
                 <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" aria-hidden>
                   <path d="M3 5.5h10m0 0L10.5 3M13 5.5 10.5 8M13 10.5H3m0 0L5.5 8M3 10.5 5.5 13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -279,7 +279,7 @@ export function PriceRange({ pairs, className }: Props) {
 
             {/* the graduated horizon: the price axis */}
             {minor.map((t, i) => <rect key={i} x={t.x} y={HORIZON + 1} width="1" height={t.major ? 10 : 5} className="fill-weaker" opacity={t.major ? 0.9 : 0.45} />)}
-            {ticks.map((t) => <text key={t} x={X(t)} y={HORIZON + 30} textAnchor="middle" fontSize="11" className="fill-weaker num">{t.toFixed(tickDigits)}</text>)}
+            {ticks.map((t) => <text key={t} x={X(t)} y={HORIZON + 30} textAnchor="middle" fontSize="10" className="fill-weaker num">{t.toFixed(tickDigits)}</text>)}
           </svg>
         </div>
       </div>

@@ -149,7 +149,7 @@ export function LocalDevPanel({ vault, user }: { vault: LiveVault; user: UserBas
                   value={amounts[t.address] ?? DEFAULT_MINT}
                   onChange={(e) => setAmounts((s) => ({ ...s, [t.address]: e.target.value }))}
                   aria-label={`Amount of ${t.symbol} to mint`}
-                  className="h-9 flex-1 min-w-0 rounded-md bg-fill-recessed border border-stroke-weak px-2.5 text-sm num text-strong outline-none focus:border-stroke-strong"
+                  className="h-9 flex-1 min-w-0 rounded-md bg-fill-recessed border border-stroke-weak px-3 text-base num text-strong outline-none focus:border-stroke-strong"
                 />
                 <Button
                   size="sm"

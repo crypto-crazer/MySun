@@ -72,7 +72,9 @@ describe('app renders without a wallet', () => {
     for (const li of container.querySelectorAll('li[data-vault]')) expect(li.textContent).not.toMatch(/APR\d/);
     expect(screen.queryByText(/1D Vol/)).toBeNull();
     expect(screen.queryAllByText(/^Demo( data)?$/i)).toEqual([]);
-    expect(screen.getAllByText(/Live on-chain/).length).toBeGreaterThan(0);
+    // NAV, the fee and the live badge are on the vault page, not in the table.
+    expect(screen.queryByText(/Live on-chain/)).toBeNull();
+    expect(screen.queryByText(/^(NAV|Fee)$/)).toBeNull();
     // One chain at a time: no demo rows under the mainnet default, no retired /live links.
     expect(rows.every((r) => r?.startsWith('4663-'))).toBe(true);
     expect(screen.queryByRole('tab', { name: 'Demo Chain' })).toBeNull();

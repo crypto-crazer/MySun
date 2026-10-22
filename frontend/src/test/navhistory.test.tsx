@@ -135,18 +135,18 @@ describe('NavChart — real series vs illustrative', () => {
   const renderChart = (historyUrl: string) =>
     render(<NavChart seed="4663-main" chainId={4663} vaultKey="main" symbol="sunEthLP" liveNav={1.2} historyUrl={historyUrl} />, { wrapper: W });
 
-  it('no source → Illustrative badge, as today', () => {
+  it('no source → the illustrative line, unbadged for now', () => {
     renderChart('');
-    expect(screen.getByText('Illustrative')).toBeDefined();
+    expect(screen.queryByText('Illustrative')).toBeNull();
     expect(screen.queryByTestId('nav-history-until')).toBeNull();
   });
 
-  it('3 snapshots → still Illustrative', async () => {
+  it('3 snapshots → still the illustrative line', async () => {
     stubFetch(body(3));
     renderChart(URL_ + '?3');
     await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 0));
-    expect(screen.getByText('Illustrative')).toBeDefined();
+    expect(screen.queryByText('Illustrative')).toBeNull();
     expect(screen.queryByTestId('nav-history-until')).toBeNull();
   });
 
