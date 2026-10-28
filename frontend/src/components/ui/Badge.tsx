@@ -10,7 +10,7 @@ const tierStyles: Record<Tier, string> = {
 
 export function TierBadge({ tier, className }: { tier: Tier; className?: string }) {
   return (
-    <span className={cx('inline-flex items-center gap-1 h-5 px-1.5 rounded border text-2xs font-medium leading-none', tierStyles[tier], className)}>
+    <span className={cx('inline-flex items-center gap-1 h-5 px-2 rounded border text-2xs font-medium leading-none', tierStyles[tier], className)}>
       {tier === 'Degen' && (
         <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" aria-hidden>
           <path d="M6 1.5 11 10.5H1L6 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
@@ -31,13 +31,13 @@ const statusMeta: Record<RangeStatus, { label: string; dot: string; text: string
 export function RangeStatusBadge({ status, className }: { status: RangeStatus; className?: string }) {
   const s = statusMeta[status];
   return (
-    <span className={cx('inline-flex items-center gap-1.5 text-xs', s.text, className)}>
-      <span className={cx('h-1.5 w-1.5 rounded-full', s.dot, status === 'defensive' && 'ring-2 ring-stroke-warning/25')} />
+    <span className={cx('inline-flex items-center gap-2 text-xs', s.text, className)}>
+      <span className={cx('h-2 w-2 rounded-full', s.dot, status === 'defensive' && 'ring-2 ring-stroke-warning/25')} />
       {s.label}
     </span>
   );
 }
 
 export function Pill({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cx('inline-flex items-center h-5 px-1.5 rounded bg-fill-weak text-2xs text-weak border border-stroke-weak', className)}>{children}</span>;
+  return <span className={cx('inline-flex items-center h-5 px-2 rounded bg-fill-weak text-2xs text-weak border border-stroke-weak', className)}>{children}</span>;
 }

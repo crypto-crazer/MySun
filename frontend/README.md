@@ -3,8 +3,9 @@
 Automated liquidity vaults for less manual LP management on EVM chains.
 
 **Live is the default.** Every page reads the registry's vaults over RPC (Robinhood Chain 4663 by
-default): Markets, the vault page and Analytics show live TVL / spot NAV / supply / fee / keeper
-(`src/chain/useLiveVaults.ts`), and the vault page's deposit / withdraw card makes real transactions. A number the chain cannot give
+default): Markets shows the network's TVL and each vault's total deposited, APR and basket; the vault
+page adds the vault token price, the performance fee and the price range (`src/chain/useLiveVaults.ts`),
+and its deposit / withdraw card makes real transactions. A number the chain cannot give
 (anything that needs history — no indexer) is either absent ("—") or, where the design keeps a
 placeholder, comes from `src/demo/` under a **Demo / Illustrative** badge. The per-section contract is
 `docs/LIVE-DATA.md` at the repo root.
@@ -223,18 +224,18 @@ State is persisted to `localStorage` under `mysun-demo-v1`.
 | `src/chain/` | Chain code: registry-driven chains, target chain + vault selection + switching, per-chain viem clients, live reads, amount math, error decoding |
 | `src/wallet/` | The wallet layer: EIP-6963 discovery, WalletConnect, picker modal, connection |
 | `src/config/generated.ts` | The full registry (local overlay included) + ABIs, generated from `../shared` by `pnpm sync:shared` — do not edit. App code reads `CHAINS` / `DEPLOYMENTS` / `vaultsForChain` from `src/chain/chains.ts` (the whole registry, both chains) |
-| `src/chain/useLiveVaults.ts` + `liveVaults.ts` | Every vault live: catalogue reads + reference-pool spots → TVL, spot NAV, fee, keeper (Markets, vault page, Analytics); `/vault/:id` resolution |
+| `src/chain/useLiveVaults.ts` + `liveVaults.ts` | Every vault live: catalogue reads + reference-pool spots → TVL, spot NAV, fee, keeper (Markets, vault page); `/vault/:id` resolution |
 | `src/chain/useVault.ts` | One vault's live state (`useLiveVaultAt`), the wallet's basket, previews and zap routes — the deposit card's data |
 | `src/components/live/` | Local dev tools (mint / fund my wallet), the network-manual and message blocks |
 | `src/components/ui/DataBadge.tsx` | `Demo data` / `Live on-chain` provenance badges |
 | `src/chain/useNavHistory.ts` + `navHistory.ts` | The vault page's real NAV line: the collector's JSONL (`VITE_NAV_HISTORY_URL`), parsed and cut per vault; `useNavHistoryRows` is the one shared fetch (chart + fee APR); ≥ 6 snapshots → real series, else the illustrative fallback |
 | `src/chain/feeApy.ts` | The design's fee APR (7D): Δ cumulative `feesUsd` over the window ÷ the window's mean `tvlUsd`, × 365 ÷ days, from the same collector rows; a series shorter than the window → "—". Earn table APR column, vault page APR tile + "Your APR" / "Fees earned" |
-| **`src/demo/`** | **Every invented number**: the illustrative NAV line (fallback until the collector has history) and emissions chart (badged), plus the legacy prototype data/math and its tests |
+| **`src/demo/`** | **Every invented number**: the illustrative NAV line (fallback until the collector has history, badged), plus the legacy prototype data/math and its tests |
 | `src/lib/market.ts` | US market clock (America/New_York, weekdays 09:30–16:00 ET, holidays ignored) |
 | `src/store/useStore.ts` | zustand store (persisted) with deposit / withdraw / stake |
 | `src/store/selectors.ts` | Derived hooks shared by Explore, Vault and Rewards |
 | `src/components/deposit/DepositCard.tsx` | The original deposit / withdraw card on the vault page (and over Markets via `?deposit=`), wired to real reads and writes |
-| `src/components/vault/PriceRange.tsx` / `RangeMeter.tsx` | The range as an instrument: the live spot between the adapters' on-chain range (`src/chain/ranges.ts` + `ticks.ts`, read by `useVaultRanges`) |
+| `src/components/vault/PriceRange.tsx` | The range as an instrument: the live spot between the adapters' on-chain range (`src/chain/ranges.ts` + `ticks.ts`, read by `useVaultRanges`) |
 | `src/test/` | Spec anchors, store consistency, chain helpers, multi-chain registry + switching, multi-vault registry + selection, vault pages, wallet picker, render smoke test |
 | `scripts/` | `sync-shared.ts` (CLI) + `generate.ts` (pure render) + `registry.ts` (validation), `e2e-local.ts` (viem end-to-end) |
 
@@ -259,8 +260,7 @@ chart are circles; ranges, controls, cards and token tiles are square-cut. The r
 `rounded-full` for that reason; use `rounded-circle` for a real circle.
 
 The motif: two stones mark a range's bounds, the sun marks the price, a graduated scale is the price axis. It appears
-in the range meter on each vault row (`components/vault/RangeMeter.tsx`), the
-price range on the vault page (`components/vault/PriceRange.tsx`) and the scene behind the Earn page. That scene is
+in the price range on the vault page (`components/vault/PriceRange.tsx`) and the scene behind the Earn page. That scene is
 alive (`components/brand/SkyScene.tsx`): the sun drifts and the stones slide to re-centre on it when it leaves the
 gap. It is a three.js scene (`duskScene.ts`) loaded on demand, so three.js stays out of the main bundle; the still
 drawing in `Scene.tsx` shows first and remains when WebGL is unavailable. Readings sit on an engraved rule (`StatRow`).

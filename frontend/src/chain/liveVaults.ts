@@ -1,5 +1,5 @@
 /**
- * Pure helpers behind the live vault surfaces (Markets, the vault page, Analytics). No React, no
+ * Pure helpers behind the live vault surfaces (Markets, the vault page). No React, no
  * network: inputs are chain reads already landed (src/chain/useVaultCatalog.ts) and the spot
  * valuation (src/chain/spot.ts). USD stays OFF-CHAIN DISPLAY ONLY — nothing here feeds a write.
  *
@@ -82,16 +82,33 @@ export function holdingUsd(balance: bigint | undefined, supply: bigint | undefin
 }
 
 /**
- * The basket as a display name, from the ON-CHAIN symbols: the anchor (USDG) last, like a pool pair
- * ("WETH / USDG"); the registry label without its parenthetical until the symbols land.
+ * The name a token goes by in names and labels: wrapped ETH reads as ETH. Amount fields, approvals
+ * and transactions keep the on-chain symbol, since the vault takes WETH, not native ETH.
  */
-export function basketName(symbols: readonly string[], fallbackLabel: string): string {
-  if (symbols.length === 0) return fallbackLabel.replace(/\s*\([^)]*\)\s*$/, '');
-  const others = symbols.filter((s) => s !== USD_ANCHOR_SYMBOL);
-  return (others.length === symbols.length ? symbols : [...others, USD_ANCHOR_SYMBOL]).join(' / ');
+export function displaySymbol(symbol: string): string {
+  return symbol === 'WETH' ? 'ETH' : symbol;
 }
 
-/** `performanceFeeBps` → "10.00%"; "—" until read. */
+/**
+ * The ON-CHAIN symbols in the order a basket reads: the anchor (USDG) last, like a pool pair, the
+ * rest as on chain. Names and icon rows both take it, so the marks line up with the words.
+ */
+export function basketOrder(symbols: readonly string[]): string[] {
+  const others = symbols.filter((s) => s !== USD_ANCHOR_SYMBOL);
+  return others.length === symbols.length ? [...symbols] : [...others, USD_ANCHOR_SYMBOL];
+}
+
+/**
+ * The basket as a display name, from the ON-CHAIN symbols in `basketOrder` ("ETH / USDG"); the
+ * registry label without its parenthetical until the symbols land.
+ */
+export function basketName(symbols: readonly string[], fallbackLabel: string): string {
+  if (symbols.length === 0) return fallbackLabel.replace(/\s*\([^)]*\)\s*$/, '').replace(/\bWETH\b/g, 'ETH');
+  return basketOrder(symbols).map(displaySymbol).join(' / ');
+}
+
+/** `performanceFeeBps` → "10%", or "12.50%" when there are hundredths; "—" until read. */
 export function feeLabel(bps: number | undefined): string {
-  return bps === undefined ? '—' : `${(bps / 100).toFixed(2)}%`;
+  if (bps === undefined) return '—';
+  return `${bps % 100 === 0 ? bps / 100 : (bps / 100).toFixed(2)}%`;
 }

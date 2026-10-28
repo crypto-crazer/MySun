@@ -9,12 +9,13 @@
  * "cannot reach the vault" state rather than blow up, so this test passes either way.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ChainProviders } from '@/chain/Providers';
 import { DEPLOYMENTS } from '@/chain/chains';
 import { Layout } from '@/components/layout/Layout';
 import { Markets } from '@/pages/Markets';
+import { useStore } from '@/store/useStore';
 import { VaultDetail } from '@/pages/VaultDetail';
 
 /**
@@ -53,6 +54,8 @@ function renderAt(path: string) {
 const DEMO_VAULT = `/vault/${DEPLOYMENTS.find((d) => d.local)!.chainId}-${DEPLOYMENTS.find((d) => d.local)!.vaults[0].key}`;
 /** A basket token symbol: the mock stack's m-prefixed tokens, or the RHC fork's REAL USDG / WETH. */
 const BASKET_SYMBOL = /^(m[A-Z]+|USDG|WETH)$/;
+/** Basket symbols in the basket table: only the chain puts them there (the deposit card names USDG, its zap token, on its own). */
+const chainSymbols = () => screen.queryAllByText(BASKET_SYMBOL).filter((e) => e.closest('table'));
 
 afterEach(cleanup);
 
@@ -72,14 +75,31 @@ describe('app renders without a wallet', () => {
     for (const li of container.querySelectorAll('li[data-vault]')) expect(li.textContent).not.toMatch(/APR\d/);
     expect(screen.queryByText(/1D Vol/)).toBeNull();
     expect(screen.queryAllByText(/^Demo( data)?$/i)).toEqual([]);
-    expect(screen.getAllByText(/Live on-chain/).length).toBeGreaterThan(0);
+    // NAV, the fee and the live badge are on the vault page, not in the table.
+    expect(screen.queryByText(/Live on-chain/)).toBeNull();
+    expect(screen.queryByText(/^(NAV|Fee)$/)).toBeNull();
     // One chain at a time: no demo rows under the mainnet default, no retired /live links.
     expect(rows.every((r) => r?.startsWith('4663-'))).toBe(true);
     expect(screen.queryByRole('tab', { name: 'Demo Chain' })).toBeNull();
     expect(container.querySelectorAll('a[href^="/live"]')).toHaveLength(0);
     expect(screen.queryByRole('link', { name: /Live vault/ })).toBeNull();
     expect(screen.getAllByRole('link', { name: 'Earn' }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: 'Analytics' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('link', { name: 'Analytics' })).toBeNull();
+  });
+
+  it('the hero offers Connect wallet beside the header until a wallet is connected, deposits or not', () => {
+    renderAt('/');
+    expect(screen.getAllByRole('button', { name: 'Connect wallet' })).toHaveLength(2);
+    cleanup();
+    // Connected with nothing deposited: the title stays, neither connect button does
+    useStore.setState({ connected: true, readOnlyMode: true });
+    try {
+      renderAt('/');
+      expect(screen.getByRole('heading', { level: 1, name: /Markets move/ })).toBeDefined();
+      expect(screen.queryAllByRole('button', { name: 'Connect wallet' })).toEqual([]);
+    } finally {
+      useStore.setState({ connected: false, readOnlyMode: false });
+    }
   });
 
   it('the demo-chain vault page renders the original layout and shows no invented APR (APR —)', async () => {
@@ -97,8 +117,7 @@ describe('app renders without a wallet', () => {
     renderAt(DEMO_VAULT);
     await waitFor(
       () => {
-        // A basket token symbol can only come from the chain (nothing hardcodes "mUSDG" or "USDG").
-        const reached = screen.queryAllByText(BASKET_SYMBOL).length > 0;
+        const reached = chainSymbols().length > 0;
         const failed = screen.queryAllByText(/not reachable|Cannot reach the vault/i).length > 0;
         expect(reached || failed).toBe(true);
       },
@@ -107,8 +126,10 @@ describe('app renders without a wallet', () => {
     if (screen.queryAllByText(/not reachable|Cannot reach the vault/i).length > 0) {
       console.warn('render.test: local chain unreachable — asserted the offline state instead');
     } else {
-      // Real reads landed: the basket rows and the card's per-token amount boxes are live.
-      expect(screen.getAllByText(BASKET_SYMBOL).length).toBeGreaterThan(0);
+      // Real reads landed: the basket rows and, in kind, the card's per-token amount boxes are live.
+      expect(chainSymbols().length).toBeGreaterThan(0);
+      await waitFor(() => expect((screen.getByRole('button', { name: /^(Both|All)$/ }) as HTMLButtonElement).disabled).toBe(false), { timeout: 10_000 });
+      act(() => screen.getByRole('button', { name: /^(Both|All)$/ }).click());
       await waitFor(() => expect(screen.getAllByLabelText(/^(m[A-Z]+|USDG|WETH) amount$/).length).toBeGreaterThan(1), { timeout: 10_000 });
     }
   });

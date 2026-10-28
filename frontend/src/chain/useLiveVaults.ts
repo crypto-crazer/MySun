@@ -1,6 +1,6 @@
 /**
  * Every registry vault this build offers, read live and valued at spot — the one data source of
- * Markets, the vault page and Analytics. Wraps the catalogue
+ * Markets and the vault page. Wraps the catalogue
  * (./useVaultCatalog.ts) with one reference-pool spot hook per chain (./useSpotPrices.ts) and the
  * spot math (./spot.ts, ./liveVaults.ts). Nothing invented: a figure the chain cannot give is
  * `undefined` and the caller renders "—".

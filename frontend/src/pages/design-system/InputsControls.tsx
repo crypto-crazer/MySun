@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { parseSlippageBps } from '@/chain/deposit';
 import { AmountInput } from '@/components/ui/AmountInput';
+import { PercentInput } from '@/components/ui/PercentInput';
 import { Segmented, UnderlineTabs } from '@/components/ui/Tabs';
 import { Toggle } from '@/components/ui/Toggle';
 import { Code, PropsTable, Section, Specimen, SubSection } from './parts';
@@ -8,6 +10,7 @@ export function InputsControlsContent() {
   return (
     <>
       <AmountInputSection />
+      <PercentInputSection />
       <ToggleSection />
       <SegmentedSection />
       <UnderlineTabsSection />
@@ -64,6 +67,50 @@ function AmountInputSection() {
   );
 }
 
+function PercentInputSection() {
+  const [tol, setTol] = useState('0.25');
+  const [bad, setBad] = useState('abc');
+  // The deposit card's own check, so the specimen says what the card says
+  const slip = parseSlippageBps(bad);
+  return (
+    <Section
+      id="percent-input"
+      title="Percent input"
+      source="src/components/ui/PercentInput.tsx"
+      lede="A short percentage, typed: the slippage tolerance in the deposit card's details. A small well, recessed like the amount box, with the % after the figure. Focused, the edge lights; wrong, it turns to error and the row says why."
+    >
+      <SubSection title="States">
+        <div className="grid gap-5 md:grid-cols-2">
+          <Specimen surface="elevated" className="!block" code="default">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-weaker">Slippage tolerance</span>
+              <PercentInput value={tol} onChange={setTol} ariaLabel="Slippage tolerance in percent" />
+            </div>
+          </Specimen>
+          <Specimen surface="elevated" className="!block" code="error">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-weaker">Slippage tolerance</span>
+              <PercentInput value={bad} onChange={setBad} error={!slip.ok} ariaLabel="Slippage tolerance in percent" />
+            </div>
+            {!slip.ok && <p className="mt-2 text-right text-xs text-error">{slip.error}</p>}
+          </Specimen>
+        </div>
+      </SubSection>
+
+      <SubSection title="Props">
+        <PropsTable
+          rows={[
+            { name: 'value', type: 'string', note: 'The figure as typed, without the %. Kept as a string so "0." survives.' },
+            { name: 'onChange', type: '(v: string) => void', note: 'Called with every edit.' },
+            { name: 'ariaLabel', type: 'string', note: 'The field has no visible label of its own; name it, with the unit.' },
+            { name: 'error', type: 'boolean', note: 'Turns the edge to stroke-error. Say what is wrong next to the field.' },
+          ]}
+        />
+      </SubSection>
+    </Section>
+  );
+}
+
 function ToggleSection() {
   const [a, setA] = useState(true);
   const [b, setB] = useState(false);
@@ -76,8 +123,8 @@ function ToggleSection() {
       lede="A setting that takes effect at once. The knob is square-cut like every other control; on is a filled track, off is an empty one."
     >
       <Specimen code='<Toggle checked={on} onChange={setOn} label="Auto-compound" />'>
-        <label className="flex items-center gap-3 text-sm text-weak"><Toggle checked={a} onChange={setA} label="Auto-compound" /> Auto-compound</label>
-        <label className="flex items-center gap-3 text-sm text-weak"><Toggle checked={b} onChange={setB} label="Show closed vaults" /> Show closed vaults</label>
+        <label className="flex items-center gap-3 text-base text-weak"><Toggle checked={a} onChange={setA} label="Auto-compound" /> Auto-compound</label>
+        <label className="flex items-center gap-3 text-base text-weak"><Toggle checked={b} onChange={setB} label="Show closed vaults" /> Show closed vaults</label>
       </Specimen>
       <SubSection title="Props">
         <PropsTable
@@ -139,7 +186,7 @@ function UnderlineTabsSection() {
       <Specimen className="!block" code="<UnderlineTabs value={tab} onChange={setTab} options={[…]} />">
         <UnderlineTabs value={tab} onChange={setTab} options={[{ value: 'overview', label: 'Overview' }, { value: 'history', label: 'Rebalance history' }, { value: 'parameters', label: 'Parameters' }]} />
       </Specimen>
-      <p className="max-w-[64ch] text-sm text-weak">Takes the same props as Segmented, without <Code>size</Code>.</p>
+      <p className="max-w-[64ch] text-base text-weak">Takes the same props as Segmented, without <Code>size</Code>.</p>
     </Section>
   );
 }
@@ -153,7 +200,7 @@ function ChainFilterSection() {
       lede="A row of text tabs for the network, the chosen one underlined. With one chain there is nothing to choose, so it draws nothing: that is why the Earn page shows no filter today."
     >
       <Specimen code="<ChainFilter value={chain} onChange={setChain} />">
-        <span className="text-sm text-weaker">Nothing is drawn while Robinhood Chain is the only network. Add a second chain to the component's list and the filter shows itself.</span>
+        <span className="text-base text-weaker">Nothing is drawn while Robinhood Chain is the only network. Add a second chain to the component's list and the filter shows itself.</span>
       </Specimen>
     </Section>
   );
@@ -170,11 +217,11 @@ function NativeControlsSection() {
       lede="Two native controls, restyled rather than rebuilt, so they keep their keyboard and screen reader behaviour for free."
     >
       <Specimen code={'<input type="range" />   <input type="checkbox" className="accent-fill-accent" />'}>
-        <label className="grid w-full max-w-[280px] gap-2.5 text-sm text-weak">
+        <label className="grid w-full max-w-[280px] gap-3 text-base text-weak">
           <span className="flex justify-between"><span>Withdraw</span><span className="num text-strong">{pct}%</span></span>
           <input type="range" min={0} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} />
         </label>
-        <label className="flex items-start gap-2.5 text-sm text-weak">
+        <label className="flex items-start gap-3 text-base text-weak">
           <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 accent-fill-accent" />
           I understand that LP positions can lose value.
         </label>

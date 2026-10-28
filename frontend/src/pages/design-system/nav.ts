@@ -43,6 +43,7 @@ export const TABS: TabConfig[] = [
     label: 'Inputs & controls',
     items: [
       { id: 'amount-input', label: 'Amount input', keywords: ['field', 'number', 'max', 'balance', 'error'] },
+      { id: 'percent-input', label: 'Percent input', keywords: ['slippage', 'tolerance', 'field', 'number', 'error'] },
       { id: 'toggle', label: 'Toggle', keywords: ['switch'] },
       { id: 'segmented', label: 'Segmented', keywords: ['tabs', 'segmented control'] },
       { id: 'underline-tabs', label: 'Underline tabs', keywords: ['tabs'] },

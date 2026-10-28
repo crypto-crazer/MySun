@@ -1,5 +1,5 @@
 /**
- * Colour tokens, in two layers. This file is the single source:
+ * Colour tokens, in two layers, and the type scale. This file is the single source:
  *  - tailwind.config.ts turns it into CSS variables and into the colour utilities,
  *  - lib/theme.ts into hex values for chart libraries,
  *  - /design-system into the swatches, and docs/design-system.md describes the rules.
@@ -178,4 +178,25 @@ export function tailwindColors(): Record<string, string> {
     colors[t.name] = t.alpha === undefined ? `rgb(var(--color-${t.name}) / <alpha-value>)` : `rgb(var(--color-${t.name}))`;
   }
   return colors;
+}
+
+/**
+ * The type scale: even sizes on 4px line heights, and the whole of it (Tailwind's own sizes are
+ * replaced, not extended). There is no `sm`; supporting text is `base` in a weaker colour.
+ */
+export const TYPE_SCALE = {
+  '2xs': ['10px', '12px'],
+  xs: ['12px', '16px'],
+  base: ['14px', '20px'],
+  md: ['16px', '24px'],
+  lg: ['18px', '24px'],
+  xl: ['20px', '28px'],
+  '2xl': ['24px', '32px'],
+  '3xl': ['32px', '40px'],
+  '4xl': ['40px', '48px'],
+} satisfies Record<string, [string, string]>;
+
+/** A step's font size in px, for chart libraries that take a number rather than a class. */
+export function fontPx(step: keyof typeof TYPE_SCALE): number {
+  return parseFloat(TYPE_SCALE[step][0]);
 }

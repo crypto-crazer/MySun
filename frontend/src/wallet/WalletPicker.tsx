@@ -26,7 +26,7 @@ export function WalletPicker() {
           wallet to use the live vault, or browse the prototype with demo data.
         </p>
       ) : (
-        <ul className="space-y-1.5">
+        <ul className="space-y-2">
           {options.map((o) => (
             <li key={o.id}>
               <WalletRow
@@ -41,7 +41,7 @@ export function WalletPicker() {
       )}
 
       {error && (
-        <p className="mt-3 rounded border border-stroke-error/40 bg-fill-error/10 px-2.5 py-2 text-xs text-error leading-snug">
+        <p className="mt-3 rounded border border-stroke-error/40 bg-fill-error/10 px-3 py-2 text-xs text-error leading-snug">
           {error.message}
         </p>
       )}
@@ -88,7 +88,7 @@ function WalletRow({
       className="w-full h-12 px-3 rounded-md border border-stroke-weak bg-fill-recessed hover:border-stroke-stronger disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center gap-3 text-left"
     >
       <WalletIcon option={option} />
-      <span className="flex-1 min-w-0 text-sm font-medium text-strong truncate">{option.name}</span>
+      <span className="flex-1 min-w-0 text-base font-medium text-strong truncate">{option.name}</span>
       {busy ? (
         <Spinner className="h-4 w-4 text-weaker" />
       ) : (

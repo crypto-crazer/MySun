@@ -373,8 +373,10 @@ export interface ZapRoute {
  * contract (planned chains list none), the basket holds the route token, the zap has this vault
  * registered, and every other basket token has a route (from the route token for a
  * zap-in, into it for a zap-out) — otherwise "USDG only" would not be what the contract does.
+ * `zapInPending` / `zapOutPending` are true while that probe is still in flight, so the card can tell
+ * "not confirmed yet" from "not served" (a failed probe counts as not served).
  */
-export function useZapRoutes(vault: LiveVault): { zapIn?: ZapRoute; zapOut?: ZapRoute } {
+export function useZapRoutes(vault: LiveVault): { zapIn?: ZapRoute; zapOut?: ZapRoute; zapInPending: boolean; zapOutPending: boolean } {
   const periphery = vault.deployment?.periphery;
   const index = vault.tokens.findIndex((t) => t.symbol === ZAP_ROUTE_SYMBOL);
   const token = index === -1 ? undefined : vault.tokens[index];
@@ -425,6 +427,8 @@ export function useZapRoutes(vault: LiveVault): { zapIn?: ZapRoute; zapOut?: Zap
       periphery?.zapOut && token && available(outReads.data)
         ? { zap: periphery.zapOut, token, index, routeFeeBps: routeFeeBps(outReads.data) }
         : undefined,
+    zapInPending: inReads.isLoading,
+    zapOutPending: outReads.isLoading,
   };
 }
 

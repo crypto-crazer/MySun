@@ -101,7 +101,7 @@ function SideNav({ active, current }: { active: TabConfig; current: string }) {
   return (
     <nav aria-label="Design system" className="grid gap-5 lg:sticky lg:top-[84px] lg:-m-1 lg:max-h-[calc(100vh-108px)] lg:overflow-y-auto lg:p-1">
       <label className="flex h-10 items-center gap-2 rounded border border-stroke-strong px-3 text-weaker focus-within:border-stroke-strongest">
-        <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" fill="none" aria-hidden>
+        <svg viewBox="0 0 16 16" className="h-4 w-4 shrink-0" fill="none" aria-hidden>
           <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5" />
           <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
@@ -110,7 +110,7 @@ function SideNav({ active, current }: { active: TabConfig; current: string }) {
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search"
           aria-label="Search tokens and components"
-          className="min-w-0 flex-1 bg-transparent text-sm text-strong outline-none placeholder:text-weaker focus-visible:outline-none"
+          className="min-w-0 flex-1 bg-transparent text-base text-strong outline-none placeholder:text-weaker focus-visible:outline-none"
         />
       </label>
 
@@ -118,13 +118,13 @@ function SideNav({ active, current }: { active: TabConfig; current: string }) {
         <ul className="grid gap-0.5">
           {matches.map(({ tab, item }) => (
             <li key={`${tab.id}/${item.id}`}>
-              <Link to={`/design-system/${tab.id}#${item.id}`} onClick={() => setQ('')} className="flex items-baseline justify-between gap-3 py-1.5 text-sm text-weak hover:text-strong">
+              <Link to={`/design-system/${tab.id}#${item.id}`} onClick={() => setQ('')} className="flex items-baseline justify-between gap-3 py-2 text-base text-weak hover:text-strong">
                 {item.label}
                 <span className="text-xs text-weaker">{tab.label}</span>
               </Link>
             </li>
           ))}
-          {!matches.length && <li className="py-1.5 text-sm text-weaker">Nothing matches "{q.trim()}".</li>}
+          {!matches.length && <li className="py-2 text-base text-weaker">Nothing matches "{q.trim()}".</li>}
         </ul>
       ) : (
         <ul className="flex gap-x-5 overflow-x-auto lg:grid lg:gap-4 lg:overflow-visible">
@@ -147,7 +147,7 @@ function SideNav({ active, current }: { active: TabConfig; current: string }) {
                         <Link
                           to={`/design-system/${t.id}#${i.id}`}
                           className={cx(
-                            '-ml-px block border-l py-[5px] pl-3.5 text-sm transition-colors',
+                            '-ml-px block border-l py-1 pl-4 text-base transition-colors',
                             // the section in view is marked the way the header marks the page: a line in the sun colour
                             i.id === current ? 'border-stroke-accent text-strong' : 'border-transparent text-weak hover:text-strong',
                           )}

@@ -53,6 +53,8 @@ if (!window.localStorage) {
 const LOCAL = 'Demo Chain';
 /** A basket token symbol: the mock stack's m-prefixed tokens, or the RHC fork's REAL USDG / WETH. */
 const BASKET_SYMBOL = /^(m[A-Z]+|USDG|WETH)$/;
+/** Basket symbols in the basket table: only the chain puts them there (the deposit card names USDG, its zap token, on its own). */
+const chainSymbols = () => screen.queryAllByText(BASKET_SYMBOL).filter((e) => e.closest('table'));
 const ACCOUNT = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
 
 /** A wallet parked on chain 1 (no registry entry → no deployment) that has never heard of the local chain. */
@@ -118,7 +120,7 @@ const OFFLINE = /not reachable|Cannot reach the vault/i;
 async function settled(): Promise<boolean> {
   await waitFor(
     () => {
-      const reached = screen.queryAllByText(BASKET_SYMBOL).length > 0;
+      const reached = chainSymbols().length > 0;
       const failed = screen.queryAllByText(OFFLINE).length > 0;
       expect(reached || failed).toBe(true);
     },

@@ -4,12 +4,13 @@
  * switch (adding the chain first if the wallet does not know it). Chains without a deployment are
  * listed — you can go there — but marked so nobody expects a vault.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { SUPPORTED_CHAINS, chainShortLabel, hasDeployment } from '@/chain/chains';
 import { describeSwitchError } from '@/chain/switchChain';
 import { useSwitchToChain, useTargetChain } from '@/chain/useTargetChain';
 import { Button } from '@/components/ui/Button';
 import { ChainLogo } from '@/components/ui/ChainLogo';
+import { POPOVER_PANEL, useDismiss } from '@/components/ui/Popover';
 import { Spinner } from '@/components/ui/Spinner';
 import { BRAND } from '@/lib/brand';
 import { cx } from '@/lib/format';
@@ -22,14 +23,7 @@ export function ChainSelector() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
+  useDismiss(ref, open, setOpen);
 
   const warn = isWrongChain || !deployed;
   // The registry does not say whose chain it is, so the mark goes by name. Other chains show the status dot alone.
@@ -49,18 +43,19 @@ export function ChainSelector() {
         className={cx('sm:!px-4', warn && 'btn-glass-warning')}
       >
         {/* flex, not inline-flex, here and on the mark: an inline box sits on the label's text line and ends up above centre */}
-        <span className="flex min-w-0 items-center gap-2 sm:gap-2.5">
+        <span className="flex min-w-0 items-center gap-2 sm:gap-3">
           {switching ? (
             <Spinner className="h-3 w-3 text-weaker" />
           ) : robinhood ? (
             <span className="relative flex shrink-0">
               <ChainLogo chain="robinhood" size={18} />
-              {warn && <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-warning ring-[1.5px] ring-background-base" aria-hidden />}
+              {warn && <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-warning ring-[1.5px] ring-background-base" aria-hidden />}
             </span>
           ) : (
             <span className={cx('h-2 w-2 rounded-full shrink-0', warn ? 'bg-warning' : 'bg-success')} aria-hidden />
           )}
-          <span className="max-w-[9rem] truncate">{chainShortLabel(chain.id)}</span>
+          {/* Phones show the mark alone, so the header fits one row; the button's label still names the chain */}
+          <span className="hidden max-w-[9rem] truncate sm:block">{chainShortLabel(chain.id)}</span>
           <svg viewBox="0 0 12 12" className="h-3 w-3 text-weaker shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
             <path d="M3 4.5l3 3 3-3" />
           </svg>
@@ -70,7 +65,7 @@ export function ChainSelector() {
         <ul
           role="listbox"
           aria-label="Networks"
-          className="absolute right-0 top-full mt-2 w-72 bg-background-popover border border-stroke-strong rounded-md shadow-pop p-1 animate-fade-in z-40"
+          className={cx(POPOVER_PANEL, 'w-72 p-1')}
         >
           {SUPPORTED_CHAINS.map((c) => {
             const current = c.id === chain.id;
@@ -90,7 +85,7 @@ export function ChainSelector() {
                     });
                   }}
                   className={cx(
-                    'w-full rounded px-2.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-background-elevated disabled:cursor-not-allowed',
+                    'w-full rounded px-3 py-2 text-left text-xs flex items-center gap-2 hover:bg-background-elevated disabled:cursor-not-allowed',
                     current ? 'text-strong' : 'text-weak',
                   )}
                 >

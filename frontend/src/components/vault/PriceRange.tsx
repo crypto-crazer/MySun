@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { fmtQuote } from '@/lib/format';
 import { useElementWidth } from '@/lib/useElementWidth';
 import { Button } from '@/components/ui/Button';
+import { Segmented } from '@/components/ui/Tabs';
 
 /**
  * One pair the drawing can show: `price` is the LIVE spot (quote per base, from the reference pool);
@@ -17,7 +18,7 @@ export interface RangePair {
 }
 
 interface Props {
-  /** One per non-anchor basket token; a switch appears when there is more than one. */
+  /** One per non-anchor basket token; a segmented switch appears when there is more than one. */
   pairs: readonly RangePair[];
   className?: string;
 }
@@ -113,36 +114,41 @@ export function PriceRange({ pairs, className }: Props) {
   const sky = `${id}-sky`, glow = `${id}-glow`, bloom = `${id}-bloom`, sun = `${id}-sun`;
   const face = `${id}-face`, side = `${id}-side`, warmL = `${id}-warm-l`, warmR = `${id}-warm-r`, foot = `${id}-foot`, grain = `${id}-grain`, plate = `${id}-plate`;
   const ground = `${id}-ground`, cast = `${id}-cast`, lane = `${id}-lane`, above = `${id}-above`;
-  const label = { fontSize: 10, letterSpacing: '0.14em' } as const;
+  // The SVG's small caps labels: the `2xs` step at the label tracking
+  const label = { letterSpacing: '0.14em' } as const;
 
   return (
     <section className={className} aria-label="Price range">
       <div className="overflow-hidden rounded-lg border border-stroke-strong bg-fill-recessed">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stroke-weak px-4 py-[11px] text-xs text-weaker">
-          <h3 className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-            <b className="display text-sm text-strong">Price range</b>
-            <Button
-              type="button"
-              variant="secondary"
-              size="xs"
-              onClick={() => setFlipped(!flipped)}
-              aria-label={`Priced in ${quote} per ${base}. Switch to ${base} per ${quote}`}
-            >
-              <span className="inline-flex items-center gap-1.5">
-                {quote} per {base}
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stroke-weak px-4 py-3 text-xs text-weaker">
+          {/* Which token's range, then the unit it reads in; the arrows only turn that unit round */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h3 className="display text-base text-strong">Price range</h3>
+            {pairs.length > 1 && (
+              <Segmented
+                size="sm"
+                value={pair.base}
+                onChange={(b) => setPick(pairs.findIndex((p) => p.base === b))}
+                options={pairs.map((p) => ({ value: p.base, label: p.base }))}
+              />
+            )}
+            <span className="inline-flex items-center gap-1 num">
+              {quote} per {base}
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="w-7 px-0"
+                onClick={() => setFlipped(!flipped)}
+                aria-label={`Priced in ${quote} per ${base}. Switch to ${base} per ${quote}`}
+              >
                 <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" aria-hidden>
                   <path d="M3 5.5h10m0 0L10.5 3M13 5.5 10.5 8M13 10.5H3m0 0L5.5 8M3 10.5 5.5 13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-              </span>
-            </Button>
-          </h3>
+              </Button>
+            </span>
+          </div>
           <span className="flex flex-wrap items-center gap-2 num">
-            {pairs.length > 1 &&
-              pairs.map((p, i) => (
-                <Button key={p.base} type="button" variant={i === pick ? 'secondary' : 'ghost'} size="xs" aria-pressed={i === pick} onClick={() => setPick(i)}>
-                  {p.base}
-                </Button>
-              ))}
             {!inRange && <span className="text-error">Out of range</span>}
             <span>Live price · on-chain range</span>
           </span>
@@ -267,19 +273,19 @@ export function PriceRange({ pairs, className }: Props) {
                   <rect x={st.x} y={HORIZON - 26} width={STONE_W} height="26" fill={`url(#${foot})`} />
                 </g>
                 <rect x={st.x} y={top} width={STONE_W} height="1" fill="#fdf3e9" opacity=".3" />
-                <text x={st.centre} y={top - 32} textAnchor="middle" className="fill-weaker" {...label}>{st.name}</text>
+                <text x={st.centre} y={top - 32} textAnchor="middle" className="fill-weaker text-2xs" {...label}>{st.name}</text>
                 <text x={st.centre} y={top - 11} textAnchor="middle" fontSize="16" className="fill-strong num">{fmtQuote(st.value)}</text>
               </g>
             ))}
 
             {/* the price reading */}
             {!aside && <rect x={sunX} y={HORIZON - 96} width="1" height={96 - SUN_R - 14} className="fill-accent-bright" opacity=".55" />}
-            <text x={priceX} y={HORIZON - 132} textAnchor={priceAnchor} className="fill-weak" {...label}>PRICE</text>
+            <text x={priceX} y={HORIZON - 132} textAnchor={priceAnchor} className="fill-weak text-2xs" {...label}>PRICE</text>
             <text x={priceX} y={HORIZON - 106} textAnchor={priceAnchor} fontSize="24" className="fill-accent-bright num">{priceText}</text>
 
             {/* the graduated horizon: the price axis */}
             {minor.map((t, i) => <rect key={i} x={t.x} y={HORIZON + 1} width="1" height={t.major ? 10 : 5} className="fill-weaker" opacity={t.major ? 0.9 : 0.45} />)}
-            {ticks.map((t) => <text key={t} x={X(t)} y={HORIZON + 30} textAnchor="middle" fontSize="11" className="fill-weaker num">{t.toFixed(tickDigits)}</text>)}
+            {ticks.map((t) => <text key={t} x={X(t)} y={HORIZON + 30} textAnchor="middle" className="fill-weaker num text-2xs">{t.toFixed(tickDigits)}</text>)}
           </svg>
         </div>
       </div>

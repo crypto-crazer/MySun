@@ -21,7 +21,7 @@ export function Toggle({ checked, onChange, label }: Props) {
     >
       <span
         className={cx(
-          'inline-block h-3.5 w-3.5 rounded-full bg-inverse-strong transition-transform duration-150',
+          'inline-block h-[14px] w-[14px] rounded-full bg-inverse-strong transition-transform duration-150',
           checked ? 'translate-x-[18px]' : 'translate-x-[2px]',
         )}
       />
