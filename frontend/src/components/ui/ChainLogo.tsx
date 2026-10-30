@@ -1,4 +1,4 @@
-import { CHAINS, type ChainId } from '@/demo/data/chains';
+import { CHAINS, type ChainId } from '@/lib/chainBrands';
 import { cx } from '@/lib/format';
 
 /** Chain marks. Robinhood Chain is its own feather on its own lime; the others are simplified marks in one neutral tone. */

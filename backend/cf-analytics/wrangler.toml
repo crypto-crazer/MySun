@@ -1,0 +1,24 @@
+name = "mysun-analytics"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+account_id = "c53b147ee4dff886f6e1e733cb85adea"
+
+# Also publish on the account's workers.dev subdomain (the mysun.dev route needs a DNS
+# record to resolve; workers.dev resolves immediately). Both serve the same worker.
+workers_dev = true
+
+# Public route on the mysun.dev zone (edge-intercepted, no DNS change) — the demo worker
+# (frontend/cf-worker) serves demo.mysun.dev the same way.
+routes = [
+  { pattern = "analytics.mysun.dev/*", zone_name = "mysun.dev" }
+]
+
+# NAV/fee collector (port of backend/src/collect-nav.ts). The hourly cron is the ONLY writer of the
+# `nav-history.jsonl` key; the fetch handler only reads it. DRPC_API_KEY is a secret
+# (`pnpm exec wrangler secret put DRPC_API_KEY`), never in this file.
+r2_buckets = [
+  { binding = "mysun_analytics", bucket_name = "mysun-analytics-history" }
+]
+
+[triggers]
+crons = ["0 * * * *"]

@@ -13,6 +13,21 @@
 /** A real series needs at least this many snapshots for one vault; fewer → the chart stays illustrative. */
 export const MIN_NAV_HISTORY_POINTS = 6;
 
+/**
+ * One basket leg of a snapshot: its pending (unharvested) fee amount, as the collector read it from the
+ * adapter's `fees()`. `feeRaw` stays a decimal string — the amounts are bigints and the row is JSON.
+ */
+export interface NavHistoryTokenRow {
+  address: string;
+  symbol?: string;
+  decimals: number;
+  /** Display-only spot price the collector valued the leg at. */
+  priceUsd: number;
+  /** Pending fee amount in the token's base units. NOT cumulative: a harvest resets it. */
+  feeRaw: string;
+  feeUsd?: number;
+}
+
 /** One collector snapshot, reduced to what the app reads. */
 export interface NavHistoryRow {
   /** Epoch ms of the snapshot. */
@@ -24,7 +39,12 @@ export interface NavHistoryRow {
   /** Spot NAV in USD; undefined when the collector could not price it (e.g. zero supply). */
   navUsd: number | undefined;
   tvlUsd: number | undefined;
+  /** Pending (unharvested) fees in USD — a level, not a cumulative total (see NavHistoryTokenRow). */
   feesUsd: number | undefined;
+  /** The legs' pending fees, for accrual math that survives a harvest. Absent on older rows. */
+  tokens?: NavHistoryTokenRow[];
+  /** The vault's performance-fee cut in bps. Absent on older rows. */
+  performanceFeeBps?: number;
 }
 
 /** One point of a vault's real NAV series. */
@@ -39,6 +59,30 @@ const num = (x: unknown): number | undefined => {
   return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
 };
 
+const str = (x: unknown): string | undefined => {
+  if (typeof x === 'string' && x.trim() !== '') return x;
+  if (typeof x === 'number' && Number.isFinite(x)) return String(x);
+  return undefined;
+};
+
+/** The legs' pending fees, when the row carries them (rows written before this field → undefined). */
+function toTokenRows(x: unknown): NavHistoryTokenRow[] | undefined {
+  if (!Array.isArray(x)) return undefined;
+  const out: NavHistoryTokenRow[] = [];
+  for (const raw of x) {
+    if (!raw || typeof raw !== 'object') continue;
+    const o = raw as Record<string, unknown>;
+    const address = str(o.address);
+    const decimals = num(o.decimals);
+    const priceUsd = num(o.priceUsd);
+    const feeRaw = str(o.feeRaw);
+    if (address === undefined || decimals === undefined || priceUsd === undefined || feeRaw === undefined) continue;
+    const feeUsd = num(o.feeUsd);
+    out.push({ address, symbol: str(o.symbol), decimals, priceUsd, feeRaw, ...(feeUsd === undefined ? {} : { feeUsd }) });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 /** One parsed line → a row, or undefined when it is not a usable snapshot. */
 function toRow(o: unknown): NavHistoryRow | undefined {
   if (!o || typeof o !== 'object') return undefined;
@@ -47,7 +91,19 @@ function toRow(o: unknown): NavHistoryRow | undefined {
   if (typeof r.ts !== 'string' || typeof r.vaultKey !== 'string' || chainId === undefined) return undefined;
   const t = Date.parse(r.ts);
   if (!Number.isFinite(t)) return undefined;
-  return { t, ts: r.ts, chainId, vaultKey: r.vaultKey, navUsd: num(r.navUsd), tvlUsd: num(r.tvlUsd), feesUsd: num(r.feesUsd) };
+  const tokens = toTokenRows(r.tokens);
+  const bps = num(r.performanceFeeBps);
+  return {
+    t,
+    ts: r.ts,
+    chainId,
+    vaultKey: r.vaultKey,
+    navUsd: num(r.navUsd),
+    tvlUsd: num(r.tvlUsd),
+    feesUsd: num(r.feesUsd),
+    ...(tokens === undefined ? {} : { tokens }),
+    ...(bps === undefined ? {} : { performanceFeeBps: bps }),
+  };
 }
 
 /**
@@ -73,7 +129,9 @@ export function parseNavHistoryJsonl(text: string): NavHistoryRow[] {
 
 /**
  * One vault's priced snapshots, oldest first (registry key on its chain: `main` / `pons` / `tri` on
- * 4663, `demo` / `pons` / `tri` on 46630). Sorted defensively; rows with no NAV are dropped.
+ * 4663, `demo` / `pons` / `tri` on the demo chain 46630). Sorted defensively; rows with no NAV are
+ * dropped. Pure filter: callers only ask for vaults the build offers (chains.ts `DEPLOYMENTS`), so a
+ * production build never asks for a 46630 series even if the collector file carries one.
  */
 export function navHistoryFor(rows: readonly NavHistoryRow[], chainId: number, vaultKey: string): NavHistoryPoint[] {
   return rows

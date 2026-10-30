@@ -243,6 +243,17 @@ describe('buildRegistry — v2 vault entries: every failure class fails loudly, 
     );
   });
 
+  it('staging: carried only as true — absent = public; false or a non-boolean is an error', () => {
+    const [c] = withVaults([vault('demo', 0x10, { staging: true }), vault('stocks', 0x20)])();
+    expect(c!.vaults![0]!.staging).toBe(true);
+    expect('staging' in c!.vaults![1]!).toBe(false);
+    for (const bad of [false, 'true', 1, null]) {
+      expect(withVaults([vault('demo', 0x10, { staging: bad })])).toThrow(
+        /chains\.46630\.vaults\[0\]\.staging must be true when present/,
+      );
+    }
+  });
+
   it.each(['usdg', 'weth', 'adapterV3', 'adapterV4', 'owner', 'treasury'])(
     'rejects unknown vault keys — including the v1 address key "%s"',
     (k) => {

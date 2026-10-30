@@ -5,7 +5,9 @@ export const POPOVER_PANEL = 'absolute right-0 top-full mt-2 bg-background-popov
 
 /**
  * Closes an open popover (a menu, the wallet panel) on a press outside `ref` or on Escape. Escape
- * stops at the popover, so an overlay underneath that also listens for it stays open.
+ * stops at the popover, so an overlay underneath that also listens for it stays open: the popover
+ * hears it first (capture phase on the document) and stops it there, whether the overlay listens on
+ * the window, the document or an element.
  */
 export function useDismiss(ref: RefObject<HTMLElement>, open: boolean, setOpen: (open: boolean) => void) {
   useEffect(() => {
@@ -15,14 +17,14 @@ export function useDismiss(ref: RefObject<HTMLElement>, open: boolean, setOpen: 
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       setOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
     return () => {
       document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onKey, true);
     };
   }, [ref, open, setOpen]);
 }

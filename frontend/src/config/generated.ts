@@ -2,7 +2,7 @@
  * AUTO-GENERATED — DO NOT EDIT.
  * Source: ../../shared/deployments.json + ../../shared/deployment.local.json + ../../shared/abis/*.json
  * Regenerate with: pnpm sync:shared
- * Generated from 2 registry chains, 6 vaults and 144 vault ABI entries.
+ * Generated from 2 registry chains, 18 vaults and 144 vault ABI entries.
  */
 
 /** Periphery contract addresses for a chain (zaps + the strategy layer's PlanExecutor) — from the registry or the local overlay. */
@@ -50,6 +50,8 @@ export interface VaultEntry {
   keeper: `0x${string}`;
   planExecutor?: `0x${string}`;
   demoUser?: `0x${string}`;
+  /** Team-only vault: hidden in the app until team mode is unlocked (src/lib/teamMode.ts). Absent = public. */
+  staging?: true;
 }
 
 /** A chain MySun is deployed on, with its vaults (never empty; the first one is the default). */
@@ -117,7 +119,7 @@ export const DEPLOYMENTS: readonly ChainDeployment[] = [
         },
         "vault": "0x6767257AAFfCE82f6ba4B6E96EDBa80e9e1112FC",
         "implementation": "0x1b8a02FeF41cAA651a6C275d859D1950e08605E8",
-        "keeper": "0x0856965c4A6346C5E33352A670CEb6E569DeF678",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
         "planExecutor": "0xbE744F7685bd7fa6365B6519CE66DeDa71873139"
       },
       {
@@ -129,7 +131,7 @@ export const DEPLOYMENTS: readonly ChainDeployment[] = [
         },
         "vault": "0x0621252C87307Ed4F07a644F1Ad3a7bb7340c35f",
         "implementation": "0x8bd16efce86b7bacd2c3d3184f6e10e0ad1c6f60",
-        "keeper": "0x0856965c4A6346C5E33352A670CEb6E569DeF678",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
         "planExecutor": "0x792Efc2e0D59679390742203F664c67F9D02F8cA"
       },
       {
@@ -141,8 +143,165 @@ export const DEPLOYMENTS: readonly ChainDeployment[] = [
         },
         "vault": "0x4bbfd5c66e5df6cbebb3240027f9f8194bcebb98",
         "implementation": "0xfb2b8bb278ed4f794508fb1967be280dda03f020",
-        "keeper": "0x0856965c4A6346C5E33352A670CEb6E569DeF678",
-        "planExecutor": "0x4d6a45Aa30c2832bB88c9a24bBdD3aCAD7f1b31F"
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0x4d6a45Aa30c2832bB88c9a24bBdD3aCAD7f1b31F",
+        "staging": true
+      },
+      {
+        "key": "spy",
+        "label": "USDG / SPY basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunSpyLP",
+          "symbol": "sunSpyLP"
+        },
+        "vault": "0x29F4b76F9C323C33A9348C47ECbEdce952486982",
+        "implementation": "0x0c50081bD577f6DE15701D36eD758C7a4375cE80",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0xAcD58caC060182B173AD3C79e137c14A3815a84B",
+        "staging": true
+      },
+      {
+        "key": "gld",
+        "label": "USDG / GLD basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunGldLP",
+          "symbol": "sunGldLP"
+        },
+        "vault": "0x93de7F559f7a701d2fb69137AEddB2BCc4EAD4B0",
+        "implementation": "0x7f4Cd354f5d877fD3dE6FA38DC2f474f96D886F5",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0x68B4fa690a4aB4435ACd25016b334ee5a14f1eA7",
+        "staging": true
+      },
+      {
+        "key": "nvda",
+        "label": "USDG / NVDA basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunNvdaLP",
+          "symbol": "sunNvdaLP"
+        },
+        "vault": "0x1D43558214C5d1839a4C4326efbFAdc8BA5B29d3",
+        "implementation": "0xAa0e97cc8F7351a2c1FfCE64d07e335E50003A1d",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0xe1fF9bB44879805A1E8bE0fEAf6a90E0fa74cDb3",
+        "staging": true
+      },
+      {
+        "key": "spcx",
+        "label": "USDG / SPCX basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunSpcxLP",
+          "symbol": "sunSpcxLP"
+        },
+        "vault": "0xA3A853e38131aDf80b30595850CAd9b949764C46",
+        "implementation": "0x4C5d660d2db4D42FB4971258fA75c1938F079B72",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0x19feDAA385e76C0edf256969e8000865aA3AeF90",
+        "staging": true
+      },
+      {
+        "key": "crcl",
+        "label": "USDG / CRCL basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunCrclLP",
+          "symbol": "sunCrclLP"
+        },
+        "vault": "0xF9FBF933a42f1741f725b3585468A08b3ae51C29",
+        "implementation": "0xc286cE4B642748Cd70c654a58Fe7277B586157b1",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0x7C6c2A9616c189916F803986C5Df58a12C62555D",
+        "staging": true
+      },
+      {
+        "key": "tsla",
+        "label": "USDG / TSLA basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunTslaLP",
+          "symbol": "sunTslaLP"
+        },
+        "vault": "0x1a6282593c3D4D48315F4730140f9B82A7cD9034",
+        "implementation": "0xF57903c2C603c4334dB6Ba39678c1976BDec7b56",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0x0569a9185c55eeb926076924bc13bC8d0C4072A1",
+        "staging": true
+      },
+      {
+        "key": "aapl",
+        "label": "USDG / AAPL basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunAaplLP",
+          "symbol": "sunAaplLP"
+        },
+        "vault": "0x95C812AD13442B6B57187EF0895eaF7065853711",
+        "implementation": "0x46E5DA2122C1A1692206b01207a3CB78F9ab4DCA",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0x983e8aD59D9D260A4BaD21D75e7E7D5bdB878094",
+        "staging": true
+      },
+      {
+        "key": "amzn",
+        "label": "USDG / AMZN basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunAmznLP",
+          "symbol": "sunAmznLP"
+        },
+        "vault": "0x2818D2195Ec6F589D054eC9a8A8cFee18E28e550",
+        "implementation": "0x80dd0Dd67A5eDA3Be9Aa7aFd26C558cA7De41dc3",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0xB38848C1A03846f2930ab91Ae52CE8dD6F6Ff0a2",
+        "staging": true
+      },
+      {
+        "key": "intc",
+        "label": "USDG / INTC basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunIntcLP",
+          "symbol": "sunIntcLP"
+        },
+        "vault": "0x3EFD9AbA9F749E05f070eEBD69477ef777AbF91E",
+        "implementation": "0x3F83a32F6b32C0F9c80403a6B5B31ef8AEd7F894",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0x65F8faa2C111E5648feED6bbFaC1EF9296023c42",
+        "staging": true
+      },
+      {
+        "key": "mu",
+        "label": "USDG / MU basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunMuLP",
+          "symbol": "sunMuLP"
+        },
+        "vault": "0x424a85C4c9B427e767b7E9E6F519E6660f0AD56e",
+        "implementation": "0x802b8111f2B63118DD7d6cd875f2f5313753f934",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0xCE938B93b902ea9f72507cF6a9f4E411E4e766f6",
+        "staging": true
+      },
+      {
+        "key": "mstr",
+        "label": "USDG / MSTR basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunMstrLP",
+          "symbol": "sunMstrLP"
+        },
+        "vault": "0x444a71032DE298b4c26e6e699E74Ee9c84bA525C",
+        "implementation": "0x5D9950b871Be197E2C57629B808C77a706b47EDe",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0xa5B9A68812374B49A9eA82c5a33cEF0A61bbEbe2",
+        "staging": true
+      },
+      {
+        "key": "nvda-spy",
+        "label": "SPY / NVDA basket (Robinhood Chain)",
+        "receipt": {
+          "name": "sunNvdaSpyLP",
+          "symbol": "sunNvdaSpyLP"
+        },
+        "vault": "0x2184A0558E63d2484d2f63d933A95709c9E583E0",
+        "implementation": "0x66E8719Cd54254E099513430B10E243ea3F5bB4D",
+        "keeper": "0x8d8167913Df18396B00cBAEC347414d6a0F7c27d",
+        "planExecutor": "0x253414a4401621253413813415910Bce05FEDeb1",
+        "staging": true
       }
     ]
   },

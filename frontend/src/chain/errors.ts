@@ -92,9 +92,3 @@ export function describeChainError(err: unknown, ctx: ErrorContext = {}): string
   return err instanceof Error ? err.message : String(err);
 }
 
-/** Custom-error NAME only (for tests / compact UI), or null when it is not a decodable revert. */
-export function chainErrorName(err: unknown): string | null {
-  if (!(err instanceof BaseError)) return null;
-  const reverted = err.walk((e) => e instanceof ContractFunctionRevertedError);
-  return reverted instanceof ContractFunctionRevertedError ? (reverted.data?.errorName ?? null) : null;
-}

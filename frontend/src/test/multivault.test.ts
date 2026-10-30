@@ -1,6 +1,6 @@
 /**
  * Multi-vault: registry v2 (a `vaults` list per deployed chain) — every validation failure class, the
- * local overlay, the generated helpers, the per-chain selection rule, and the generator's
+ * local overlay, the generated helpers, and the generator's
  * idempotency. All node, no wallet, no chain.
  */
 import { readFileSync } from 'node:fs';
@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DEPLOYMENTS, defaultVault, findVault, vaultsForChain } from '@/config/generated';
 import { resolveTargetChain } from '@/chain/targetChain';
-import { VAULT_SELECTION_KEY, parseVaultSelection, resolveVault, selectVault } from '@/chain/vaultSelection';
 import { buildRegistry, findDuplicateKey } from '../../scripts/registry';
 import { loadShared, renderGenerated } from '../../scripts/generate';
 
@@ -153,9 +152,20 @@ describe('registry v2 — every vault failure class fails loudly, with the path'
     expect(withVaults([vault(1, { demoUser: null })])).toThrow('chains.10.vaults[0].demoUser is not an address (got null)');
   });
 
+  it('staging: carried only as true — absent = public; false or a non-boolean is an error', () => {
+    const [c] = buildRegistry({ registryText: registryText({ '10': chain([vault(1, { staging: true }), vault(2)]) }) });
+    expect(c.vaults?.[0]).toEqual({ ...vault(1), staging: true });
+    expect('staging' in c.vaults![1]).toBe(false);
+    for (const bad of [false, 'true', 1, null]) {
+      expect(withVaults([vault(1, { staging: bad })])).toThrow(
+        `deployments.json: chains.10.vaults[0].staging must be true when present — omit it for a public vault (got ${JSON.stringify(bad)})`,
+      );
+    }
+  });
+
   it('unknown keys are rejected — including the v1 address keys', () => {
     expect(withVaults([vault(1, { usdg: A(3) })])).toThrow(
-      'deployments.json: chains.10.vaults[0].usdg is not a known key (allowed: key, label, receipt, vault, implementation, keeper, planExecutor, demoUser)',
+      'deployments.json: chains.10.vaults[0].usdg is not a known key (allowed: key, label, receipt, vault, implementation, keeper, planExecutor, demoUser, staging)',
     );
     expect(() => buildRegistry({ registryText: registryText({ '10': { ...chain([vault(1)]), addresses: {} } }) })).toThrow(
       'deployments.json: chains.10.addresses is not a known key',
@@ -322,77 +332,16 @@ describe('generated helpers — vaultsForChain / defaultVault / findVault', () =
   });
 });
 
-describe('vault selection — per chain, default = first, anything invalid falls back', () => {
-  const localId = LOCAL.chainId;
-  const [first, second] = LOCAL.vaults;
-
-  it('resolveVault: nothing selected → the first vault', () => {
-    expect(resolveVault(localId, {})?.key).toBe(first.key);
-    expect(resolveVault(localId, undefined)?.key).toBe(first.key);
-  });
-
-  it('resolveVault: a valid selection wins', () => {
-    expect(resolveVault(localId, { [localId]: second.key })?.vault).toBe(second.vault);
-  });
-
-  it('resolveVault: a stale or garbage key falls back to the default, never throws', () => {
-    expect(resolveVault(localId, { [localId]: 'vanished' })?.key).toBe(first.key);
-    expect(resolveVault(localId, { [localId]: '' })?.key).toBe(first.key);
-  });
-
-  it('resolveVault: choices are per chain — another chain’s choice does not leak', () => {
-    expect(resolveVault(localId, { '4663': second.key })?.key).toBe(first.key);
-  });
-
-  it('resolveVault: no deployment → no vault; a stale key falls back to the default', () => {
-    expect(resolveVault(4663, { '4663': 'demo' })?.vault).toBe(MAIN.vault); // 'demo' names nothing on 4663
-    expect(resolveVault(1, {})).toBeUndefined();
-    expect(resolveVault(undefined, {})).toBeUndefined();
-  });
-
-  it('selectVault: records a valid key, ignores an invalid one, keeps identity when unchanged', () => {
-    const empty = {};
-    const picked = selectVault(empty, localId, second.key);
-    expect(picked).toEqual({ [localId]: second.key });
-    expect(empty).toEqual({}); // not mutated
-    expect(selectVault(picked, localId, second.key)).toBe(picked);
-    expect(selectVault(picked, localId, 'vanished')).toBe(picked);
-    expect(selectVault(picked, 4663, 'demo')).toBe(picked); // 'demo' names nothing on 4663 — ignored
-    expect(selectVault(picked, 4663, 'main')).toEqual({ ...picked, '4663': 'main' });
-    expect(selectVault({ '4663': 'x' }, localId, first.key)).toEqual({ '4663': 'x', [localId]: first.key });
-  });
-
-  it('parseVaultSelection: tolerant of anything storage may hold', () => {
-    expect(parseVaultSelection(null)).toEqual({});
-    expect(parseVaultSelection(undefined)).toEqual({});
-    expect(parseVaultSelection('')).toEqual({});
-    expect(parseVaultSelection('not json')).toEqual({});
-    expect(parseVaultSelection('[]')).toEqual({});
-    expect(parseVaultSelection('"pons"')).toEqual({});
-    expect(parseVaultSelection('null')).toEqual({});
-    expect(parseVaultSelection(JSON.stringify({ [localId]: 'pons' }))).toEqual({ [localId]: 'pons' });
-    expect(
-      parseVaultSelection(JSON.stringify({ [localId]: 5, abc: 'demo', '0x1': 'demo', '046630': 'demo', '1': 'Bad_Key', '10': 'ok-key' })),
-    ).toEqual({ '10': 'ok-key' });
-  });
-
-  it('round trip through storage text', () => {
-    const picked = selectVault({}, localId, second.key);
-    expect(resolveVault(localId, parseVaultSelection(JSON.stringify(picked)))?.key).toBe(second.key);
-    expect(VAULT_SELECTION_KEY).toBe('mysun.vault.selected');
-  });
-
-  it('resolveTargetChain carries the resolved vault for the resolved chain', () => {
-    const t = (walletChainId: number | undefined, selectedChainId: number, selectedVaults = {}) =>
-      resolveTargetChain({ walletChainId, selectedChainId, selectedVaults }).vault?.key;
-    expect(t(undefined, localId)).toBe(first.key);
-    expect(t(undefined, localId, { [localId]: second.key })).toBe(second.key);
-    // Wallet on the local deployment wins over the selected chain; the vault choice still applies.
-    expect(t(localId, 4663, { [localId]: second.key })).toBe(second.key);
-    // No wallet: the selection stands — 4663 is its own deployment, on its own default vault.
-    expect(t(undefined, 4663, { [localId]: second.key })).toBe(MAIN.key);
-    // Omitting the selection entirely = defaults.
-    expect(resolveTargetChain({ walletChainId: undefined, selectedChainId: localId }).vault?.key).toBe(first.key);
+// The per-chain vault selection (`mysun.vault.selected`, resolveVault / selectVault / parseVaultSelection)
+// is gone: nothing read it — each vault page reads the vault in its URL. What remains is the chain
+// selection (Markets follows it), covered by multichain.test.ts → resolveTargetChain.
+describe('no per-chain vault selection', () => {
+  it('the target chain carries no vault — nothing to remember, nothing that can point at a hidden one', () => {
+    for (const selectedChainId of [LOCAL.chainId, 4663]) {
+      const t = resolveTargetChain({ walletChainId: undefined, selectedChainId });
+      expect('vault' in t).toBe(false);
+      expect(t.deployment?.vaults[0]?.vault).toBe(defaultVault(selectedChainId)?.vault);
+    }
   });
 });
 
@@ -406,6 +355,19 @@ describe('sync:shared — idempotent, and generated.ts is what it renders today'
     expect(once).toBe(committed);
   });
 
+  it('staging: generated.ts carries `staging: true` exactly where the registry does — never on the local stack', () => {
+    const registry = JSON.parse(shared('deployments.json')) as {
+      chains: Record<string, { vaults?: { key: string; staging?: boolean }[] }>;
+    };
+    for (const d of DEPLOYMENTS) {
+      const flagged = d.vaults.filter((v) => 'staging' in v);
+      expect(flagged.every((v) => v.staging === true)).toBe(true);
+      const expected = d.local ? [] : (registry.chains[String(d.chainId)]?.vaults ?? []).filter((v) => v.staging === true).map((v) => v.key);
+      expect(flagged.map((v) => v.key), `chain ${d.chainId}`).toEqual(expected);
+    }
+    expect(DEPLOYMENTS.find((d) => d.chainId === 4663)!.vaults.some((v) => v.staging)).toBe(true);
+  });
+
   it('input key order does not change the output (forge alphabetises the local file)', () => {
     const inputs = loadShared(sharedPath());
     const shuffled = {
@@ -413,12 +375,27 @@ describe('sync:shared — idempotent, and generated.ts is what it renders today'
       chains: inputs.chains.map((c) => ({
         ...c,
         vaults: c.vaults?.map((v) => {
-          const { vault: addr, keeper, implementation, receipt, label, key, planExecutor, demoUser } = v;
-          return { vault: addr, keeper, implementation, receipt: { symbol: receipt.symbol, name: receipt.name }, label, key, ...(planExecutor ? { planExecutor } : {}), ...(demoUser ? { demoUser } : {}) };
+          const { vault: addr, keeper, implementation, receipt, label, key, planExecutor, demoUser, staging } = v;
+          return { ...(staging ? { staging } : {}), vault: addr, keeper, implementation, receipt: { symbol: receipt.symbol, name: receipt.name }, label, key, ...(planExecutor ? { planExecutor } : {}), ...(demoUser ? { demoUser } : {}) };
         }),
       })),
     };
     expect(renderGenerated(shuffled)).toBe(renderGenerated(inputs));
+  });
+
+  it('--prod (omitLocal): the production-bundle variant carries no demo-chain data at all', () => {
+    const inputs = loadShared(sharedPath());
+    const local = inputs.chains.find((c) => c.local);
+    expect(local).toBeDefined();
+    const prod = renderGenerated(inputs, { omitLocal: true });
+    expect(prod).not.toContain(String(LOCAL.chainId));
+    expect(prod).not.toContain(local!.name);
+    expect(prod).not.toContain(local!.rpcUrl);
+    for (const v of LOCAL.vaults) expect(prod.toLowerCase()).not.toContain(v.vault.toLowerCase());
+    expect(prod).toContain('PRODUCTION VARIANT');
+    // mainnet is untouched, and the default render is unaffected by the option's existence
+    for (const key of MAIN_KEYS) expect(prod).toContain(`"key": "${key}"`);
+    expect(renderGenerated(inputs, { omitLocal: false })).toBe(renderGenerated(inputs));
   });
 });
 

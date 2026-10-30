@@ -1,0 +1,5 @@
+# Standalone root: keeps pnpm from adopting backend/ (the keeper) as this package's workspace.
+allowBuilds:
+  esbuild: true
+  workerd: true
+  sharp: false

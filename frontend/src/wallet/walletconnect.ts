@@ -190,7 +190,7 @@ const dedupe = (values: readonly string[]): string[] => [...new Set(values)];
  * required) plus `optionalNamespaces`. UP v2.25's `setNamespaces` folds the former into the latter
  * with `w(namespaces, optionalNamespaces)` — and that merge REPLACES the `chains` array of a
  * namespace both inputs touch instead of unioning it. Result: whenever both objects cover eip155,
- * the chain from `namespaces` (the default — eip155:46630, the Demo Chain) silently vanishes from
+ * the chain from `namespaces` (the default when this was found — eip155:46630, the Demo Chain) silently vanishes from
  * the proposal. Wallet sessions could never include it, which is why "switch to Demo Chain" was
  * impossible over WalletConnect even for wallets that KNOW the chain, and the phone stayed on its
  * own network ("Chain 1").
@@ -316,8 +316,9 @@ export function loadWalletConnect(): Promise<EIP1193Provider> {
     const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
     const provider = await EthereumProvider.init({
       projectId: WALLETCONNECT_PROJECT_ID,
-      // The default chain is required; every other registry chain is optional, so a wallet that
-      // cannot add the local node can still connect and be told to switch.
+      // The default chain is required; every other chain this build offers is optional (the demo
+      // chain in a local/dev build only — chains.ts), so a wallet that cannot add the local node can
+      // still connect and be told to switch.
       chains: [DEFAULT_CHAIN_ID],
       optionalChains: SUPPORTED_CHAINS.map((c) => c.id).filter((id) => id !== DEFAULT_CHAIN_ID),
       rpcMap: Object.fromEntries(SUPPORTED_CHAINS.map((c) => [c.id, c.rpcUrls.default.http[0]])),

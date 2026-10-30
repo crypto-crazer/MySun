@@ -5,9 +5,10 @@
  * same add again, best-effort: a wallet that added the network for this site can refresh its entry
  * (MetaMask prompts), which is how a stale local-stack RPC — the LAN address moves — gets fixed.
  *
- * Wallet-facing RPC URLs prefer the HTTPS tunnel override (`walletRpcOverride.ts`) when it covers
- * the chain — MetaMask/OKX refuse dapp chain-adds whose `rpcUrls` are not https — while the app's
- * own reads keep the hostname-derived (or same-origin `/rpc`) one.
+ * Wallet-facing RPC URLs are the chain's own `rpcUrls` — for the local stack the hostname-derived
+ * (or same-origin `/rpc`) one the app reads through. MetaMask/OKX refuse dapp chain-adds whose
+ * `rpcUrls` are not https, so a wallet reached over a plain-http LAN address can only add the demo
+ * chain by hand; a wallet on `localhost` is unaffected.
  *
  * The add-chain request is sent with OUR params (`addEthereumChainParams`) rather than through
  * viem's `addChain` action, so the exact object a wallet receives is the one the unit tests pin.
@@ -16,7 +17,6 @@
 import { numberToHex, type Chain, type Client, type Transport } from 'viem';
 import { switchChain } from 'viem/actions';
 import { chainEntry } from './chains';
-import { ensureWalletRpcOverride, walletRpcFor } from './walletRpcOverride';
 
 /** EIP-3085 `wallet_addEthereumChain` parameter object. */
 export interface AddEthereumChainParameter {
@@ -29,17 +29,15 @@ export interface AddEthereumChainParameter {
 
 /**
  * viem chain → the EIP-3085 object. `blockExplorerUrls` is omitted (not empty) when unknown.
- * `rpcUrls` is the tunnel override when it covers the chain, else the chain's own (hostname-derived
- * for local stacks) URLs.
+ * `rpcUrls` is the chain's own (hostname-derived for local stacks) URLs.
  */
 export function addEthereumChainParams(chain: Chain): AddEthereumChainParameter {
   const explorers = chain.blockExplorers ? Object.values(chain.blockExplorers).map((e) => e.url) : [];
-  const override = walletRpcFor(chain.id);
   return {
     chainId: numberToHex(chain.id),
     chainName: chain.name,
     nativeCurrency: { ...chain.nativeCurrency },
-    rpcUrls: override ? [override] : [...chain.rpcUrls.default.http],
+    rpcUrls: [...chain.rpcUrls.default.http],
     ...(explorers.length ? { blockExplorerUrls: explorers } : {}),
   };
 }
@@ -68,9 +66,6 @@ export type SwitchOutcome = 'switched' | 'added';
  * Anything other than "unknown chain" — a user rejection above all — is rethrown untouched.
  */
 export async function switchWalletChain(client: Client<Transport, Chain | undefined>, chain: Chain): Promise<SwitchOutcome> {
-  // Memoized and never rejecting — makes the https tunnel URL (when one is served) available to
-  // every wallet-facing parameter below.
-  await ensureWalletRpcOverride();
   try {
     await switchChain(client, { id: chain.id });
   } catch (err) {
@@ -94,8 +89,8 @@ async function addEthereumChain(client: Client<Transport, Chain | undefined>, ch
 
 /**
  * A chain whose RPC address is a moving target: only the local demo stack (`chainEntry.local`). Its
- * LAN address changes with DHCP and its tunnel URL with every quick-tunnel run, so a wallet entry
- * pointing at an older one deserves the best-effort refresh. Hosted chains have permanent URLs —
+ * LAN address changes with DHCP, so a wallet entry pointing at an older one deserves the
+ * best-effort refresh. Hosted chains have permanent URLs —
  * there is nothing to refresh.
  */
 function hasMovableRpc(chain: Chain): boolean {
@@ -123,7 +118,7 @@ async function refreshChainEntry(client: Client<Transport, Chain | undefined>, c
 
 /**
  * EIP-3085 fields a visitor would type into a wallet by hand — same source as
- * `addEthereumChainParams`, tunnel override included.
+ * `addEthereumChainParams`.
  */
 export interface ManualNetworkParams {
   chainName: string;
@@ -136,7 +131,7 @@ export function manualNetworkParams(chain: Chain): ManualNetworkParams {
   return {
     chainName: chain.name,
     chainId: chain.id,
-    rpcUrl: walletRpcFor(chain.id) ?? chain.rpcUrls.default.http[0] ?? '',
+    rpcUrl: chain.rpcUrls.default.http[0] ?? '',
     currencySymbol: chain.nativeCurrency.symbol,
   };
 }

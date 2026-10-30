@@ -1,62 +1,25 @@
 /**
- * The target chain and vault, in React: the selected chain and the per-chain vault choice live here
- * (app-wide state), the wallet's chain comes from the wallet layer, and `resolveTargetChain` decides.
+ * The target chain, in React: the selected chain lives here (app-wide state), the wallet's chain comes
+ * from the wallet layer, and `resolveTargetChain` decides.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useWallet } from '@/wallet/context';
 import { DEFAULT_CHAIN_ID } from './chains';
 import { resolveTargetChain, type TargetChain } from './targetChain';
-import { VAULT_SELECTION_KEY, parseVaultSelection, selectVault, type VaultSelection } from './vaultSelection';
 
 interface Selection {
   selectedChainId: number;
   setSelectedChainId: (chainId: number) => void;
-  selectedVaults: VaultSelection;
-  setSelectedVault: (chainId: number, key: string) => void;
 }
 
 const SelectionContext = createContext<Selection | null>(null);
 
-/** `window.localStorage` specifically: a bare `localStorage` is not the browser's one under node. */
-function storage(): Storage | undefined {
-  try {
-    return typeof window === 'undefined' ? undefined : window.localStorage;
-  } catch {
-    return undefined; // private mode / blocked storage
-  }
-}
-
-function readVaultSelection(): VaultSelection {
-  try {
-    return parseVaultSelection(storage()?.getItem(VAULT_SELECTION_KEY));
-  } catch {
-    return {};
-  }
-}
-
-function writeVaultSelection(selection: VaultSelection): void {
-  try {
-    storage()?.setItem(VAULT_SELECTION_KEY, JSON.stringify(selection));
-  } catch {
-    /* private mode — the choice just is not remembered across reloads */
-  }
-}
-
 /**
- * Mount inside WalletProvider. Starts on DEFAULT_CHAIN_ID (the first live deployment; never the local stack while one exists) and on
- * the vault choices remembered in localStorage (none → every chain on its first vault).
+ * Mount inside WalletProvider. Starts on DEFAULT_CHAIN_ID (the first live deployment; never the local stack while one exists).
  */
 export function TargetChainProvider({ children, initialChainId }: { children: ReactNode; initialChainId?: number }) {
   const [selectedChainId, setSelectedChainId] = useState(initialChainId ?? DEFAULT_CHAIN_ID);
-  const [selectedVaults, setSelectedVaults] = useState<VaultSelection>(readVaultSelection);
-  const setSelectedVault = useCallback((chainId: number, key: string) => {
-    setSelectedVaults((prev) => selectVault(prev, chainId, key));
-  }, []);
-  useEffect(() => writeVaultSelection(selectedVaults), [selectedVaults]);
-  const value = useMemo(
-    () => ({ selectedChainId, setSelectedChainId, selectedVaults, setSelectedVault }),
-    [selectedChainId, selectedVaults, setSelectedVault],
-  );
+  const value = useMemo(() => ({ selectedChainId, setSelectedChainId }), [selectedChainId]);
   return <SelectionContext.Provider value={value}>{children}</SelectionContext.Provider>;
 }
 
@@ -66,36 +29,30 @@ function useSelection(): Selection {
   return ctx;
 }
 
-/** `{ chain, deployment, vault, hasDeployment, isWrongChain }` for the live pages. Safe without a wallet. */
+/** `{ chain, deployment, hasDeployment, isWrongChain }` for the live pages. Safe without a wallet. */
 export function useTargetChain(): TargetChain & { selectedChainId: number } {
   const { address, chainId } = useWallet();
-  const { selectedChainId, selectedVaults } = useSelection();
+  const { selectedChainId } = useSelection();
   // A wallet that is still connecting has no account yet: treat it as "no wallet".
   const walletChainId = address ? chainId : undefined;
   return useMemo(
-    () => ({ ...resolveTargetChain({ walletChainId, selectedChainId, selectedVaults }), selectedChainId }),
-    [walletChainId, selectedChainId, selectedVaults],
+    () => ({ ...resolveTargetChain({ walletChainId, selectedChainId }), selectedChainId }),
+    [walletChainId, selectedChainId],
   );
 }
 
 /**
- * Look at a vault: select its chain and remember it as that chain's vault — no wallet prompt (the
- * vault page shows the wrong-network banner if the wallet is elsewhere). The vault page calls it.
+ * Look at a vault: select its chain — no wallet prompt (the vault page shows the wrong-network
+ * banner if the wallet is elsewhere). The vault page calls it; the vault itself is the page's URL.
  */
-export function useOpenVault(): (chainId: number, key: string) => void {
-  const { setSelectedChainId, setSelectedVault } = useSelection();
-  return useCallback(
-    (chainId: number, key: string) => {
-      setSelectedChainId(chainId);
-      setSelectedVault(chainId, key);
-    },
-    [setSelectedChainId, setSelectedVault],
-  );
+export function useOpenVault(): (chainId: number) => void {
+  const { setSelectedChainId } = useSelection();
+  return setSelectedChainId;
 }
 
 /**
  * The one "go to chain X" action for the selector and the wrong-network buttons: it records the
- * choice (so read-only visitors switch what they are looking at) and, with a wallet connected,
+ * choice (so visitors with no wallet switch what they are looking at) and, with a wallet connected,
  * asks the wallet to switch — adding the chain first when the wallet does not know it.
  */
 export function useSwitchToChain() {

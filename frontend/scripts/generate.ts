@@ -95,11 +95,26 @@ function vaultEntry(v: RegistryVault) {
     keeper: v.keeper,
     ...(v.planExecutor ? { planExecutor: v.planExecutor } : {}),
     ...(v.demoUser ? { demoUser: v.demoUser } : {}),
+    ...(v.staging ? { staging: true } : {}),
   };
 }
 
+export interface RenderOptions {
+  /**
+   * Leave out the `local` chain (the demo stack overlaid from deployment.local.json) entirely —
+   * name, RPC and addresses. The production-bundle variant, written only by the deploy path
+   * (`sync-shared.ts --prod`, from cf-worker/deploy.sh) and restored after the build; the committed
+   * file always carries the full registry.
+   */
+  omitLocal?: boolean;
+}
+
 /** The full text of src/config/generated.ts for these inputs. */
-export function renderGenerated({ chains, abis }: Pick<SharedInputs, 'chains' | 'abis'>): string {
+export function renderGenerated(
+  { chains: allChains, abis }: Pick<SharedInputs, 'chains' | 'abis'>,
+  { omitLocal = false }: RenderOptions = {},
+): string {
+  const chains = omitLocal ? allChains.filter((c) => !c.local) : allChains;
   const deployments = chains
     .filter((c) => c.status === 'deployed')
     .map((c) => ({ ...meta(c), vaults: (c.vaults ?? []).map(vaultEntry) }));
@@ -116,7 +131,7 @@ export function renderGenerated({ chains, abis }: Pick<SharedInputs, 'chains' | 
   return `/**
  * AUTO-GENERATED — DO NOT EDIT.
  * Source: ../../shared/deployments.json + ../../shared/deployment.local.json + ../../shared/abis/*.json
- * Regenerate with: pnpm sync:shared
+ * Regenerate with: pnpm sync:shared${omitLocal ? '\n * PRODUCTION VARIANT (sync-shared --prod): the local demo chain is omitted. Do not commit.' : ''}
  * Generated from ${chains.length} registry chains, ${vaultCount} vaults and ${vaultAbi.length} vault ABI entries.
  */
 
@@ -165,6 +180,8 @@ export interface VaultEntry {
   keeper: \`0x\${string}\`;
   planExecutor?: \`0x\${string}\`;
   demoUser?: \`0x\${string}\`;
+  /** Team-only vault: hidden in the app until team mode is unlocked (src/lib/teamMode.ts). Absent = public. */
+  staging?: true;
 }
 
 /** A chain MySun is deployed on, with its vaults (never empty; the first one is the default). */

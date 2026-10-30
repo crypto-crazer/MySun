@@ -3,8 +3,9 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip as RToolti
 import { illustrativeNavSeries } from '@/demo/series';
 import { useNavHistory } from '@/chain/useNavHistory';
 import { DemoBadge } from '@/components/ui/DataBadge';
+import { Spinner } from '@/components/ui/Spinner';
 import { Segmented } from '@/components/ui/Tabs';
-import { cx, fmtPctSigned, fmtPrice } from '@/lib/format';
+import { fmtPctSigned, fmtPrice } from '@/lib/format';
 import { usePalette } from '@/lib/theme';
 import { fontPx } from '@/lib/tokens';
 
@@ -20,8 +21,10 @@ const TICK_PX = fontPx('2xs');
 /**
  * Vault token price over the period: one line, no panel around it. The spot NAV readout under the
  * title is live. The line is REAL when the NAV-history collector (`VITE_NAV_HISTORY_URL`, src/chain/useNavHistory)
- * has ≥ 6 snapshots for this vault — drawn at the snapshots' own timestamps. Otherwise it is
- * ILLUSTRATIVE (src/demo/series.ts), ends on the live spot NAV and carries an Illustrative badge.
+ * has ≥ 6 snapshots for this vault — drawn at the snapshots' own timestamps. While that fetch is in
+ * flight the chart is an empty frame with a spinner — no line at all. Only when there is no history to
+ * draw (no source, a failed fetch, fewer than 6 snapshots) is the line ILLUSTRATIVE
+ * (src/demo/series.ts): it ends on the live spot NAV and carries an Illustrative badge.
  * The readout is live either way and never badged.
  */
 export function NavChart({
@@ -66,15 +69,31 @@ export function NavChart({
   // Hourly snapshots spanning under ~2 days read better by the hour than as a row of identical dates.
   const byHour = real && Date.parse(last.date) - Date.parse(first.date) < 2 * DAY_MS;
 
+  const title = (
+    <div className="grid gap-2">
+      <h2 className="title text-2xl leading-tight">Vault token price</h2>
+      <span className="inline-flex items-center gap-2 text-xs text-weak num" data-testid="nav-live">
+        Price now <span className="text-strong">{liveNav === undefined ? '—' : fmtPrice(liveNav)}</span>
+      </span>
+    </div>
+  );
+
+  // The history is still loading: the empty frame, never an invented line in its place.
+  if (history.isLoading) {
+    return (
+      <section className={className}>
+        <header className="mb-4 flex flex-wrap items-end justify-between gap-3">{title}</header>
+        <div className="h-56 flex items-center justify-center border-b border-stroke-strong" data-testid="nav-loading">
+          <Spinner className="h-5 w-5 text-weaker" />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className={className}>
       <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div className="grid gap-2">
-          <h2 className="title text-2xl leading-tight">Vault token price</h2>
-          <span className="inline-flex items-center gap-2 text-xs text-weak num" data-testid="nav-live">
-            Price now <span className="text-strong">{liveNav === undefined ? '—' : fmtPrice(liveNav)}</span>
-          </span>
-        </div>
+        {title}
         <div className="flex flex-wrap items-center gap-4 text-xs">
           <span className="inline-flex items-center gap-2 text-weak num">
             <span className="h-[1.5px] w-4 bg-strong" /> {symbol} <span className={tdlpRet >= 0 ? 'text-success' : 'text-error'}>{fmtPctSigned(tdlpRet, 2)}</span>
@@ -83,7 +102,7 @@ export function NavChart({
                 snapshots until {fmtStamp(new Date(last.date))}
               </span>
             ) : (
-              <DemoBadge label="Illustrative" />
+              <DemoBadge label="Illustrative" tooltip="Illustrative line — the price history is not available right now." />
             )}
           </span>
           <Segmented<Window> size="sm" value={win} onChange={setWin} options={[{ value: '30D', label: '30D' }, { value: '7D', label: '7D' }]} />
@@ -121,7 +140,7 @@ export function NavChart({
                 if (!active || !payload?.length) return null;
                 const p = payload[0].payload as { tdlp: number };
                 return (
-                  <div className={cx('rounded-sm bg-fill-inverse px-2 py-1 text-xs font-medium text-inverse-strong num')}>
+                  <div className="rounded-sm bg-fill-inverse px-2 py-1 text-xs font-medium text-inverse-strong num">
                     {real ? fmtStamp(new Date(String(label))) : label} · ${p.tdlp.toFixed(4)}
                   </div>
                 );

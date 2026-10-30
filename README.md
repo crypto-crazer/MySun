@@ -28,7 +28,7 @@ interface, and deposits, redemptions and performance-fee harvesting are all sett
 - Local demo stack — fork (default): `contracts/script/fork-demo-up.sh` (real pools on Robinhood Chain
   state, frozen into a standalone anvil, then `cd frontend && pnpm sync:shared`); offline mock:
   `anvil --chain-id 46630 --port 8547` + `forge script script/DemoLocal.s.sol --broadcast`
-- Frontend: `cd frontend && pnpm install && pnpm dev` — live vault at `/live`; end-to-end check: `pnpm e2e:local`
+- Frontend: `cd frontend && pnpm install && pnpm dev` (http://localhost:5173); end-to-end check: `pnpm e2e:local`
 - Backend: `cd backend && pnpm install && pnpm build && pnpm tick` — dry-run by default; `pnpm start` runs the loop
 
 ## License

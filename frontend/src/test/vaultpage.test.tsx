@@ -9,11 +9,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ChainProviders } from '@/chain/Providers';
 import { DEPLOYMENTS, deploymentForChain, isForkDeployment, vaultsForChain } from '@/chain/chains';
-import { VAULT_SELECTION_KEY } from '@/chain/vaultSelection';
 import { Layout } from '@/components/layout/Layout';
 import { VaultDetail } from '@/pages/VaultDetail';
 
@@ -58,7 +57,8 @@ const LOCAL_KEYS = (
 const FORK = isForkDeployment(deploymentForChain(CHAIN));
 const DEMO = VAULTS[0];
 const OTHER = VAULTS.find((v) => v.key === (FORK ? 'pons' : 'stocks')) as (typeof VAULTS)[number];
-const BASKET_SYMBOL = /^(m[A-Z]+|USDG|WETH|PONS)$/;
+// The basket table names WETH as ETH (displaySymbol) and reads in the name's order, the anchor (USDG) last.
+const BASKET_SYMBOL = /^(m[A-Z]+|USDG|ETH|WETH|PONS)$/;
 const OTHER_MARKER = FORK ? 'PONS' : 'mNVDA';
 const OFFLINE = /not reachable|Cannot reach the vault/i;
 
@@ -119,9 +119,9 @@ describe('vault page — one page per registry vault on the demo chain', () => {
     }
   });
 
-  it('opening a vault remembers it as its chain’s vault', () => {
+  it('opening a vault stores no vault choice (the page reads its URL; the per-chain selection is gone)', () => {
     renderAt(`/vault/${CHAIN}-${OTHER.key}`);
-    expect(JSON.parse(window.localStorage.getItem(VAULT_SELECTION_KEY) ?? '{}')).toEqual({ [CHAIN]: OTHER.key });
+    expect(window.localStorage.getItem('mysun.vault.selected')).toBeNull();
   });
 
   it('two vaults never mix baskets', async () => {
@@ -132,14 +132,18 @@ describe('vault page — one page per registry vault on the demo chain', () => {
       return;
     }
     const demoBasket = basketSymbols();
-    expect(demoBasket).toEqual(FORK ? ['USDG', 'WETH'] : ['mUSDG', 'mWETH']);
+    expect(demoBasket).toEqual(FORK ? ['ETH', 'USDG'] : ['mUSDG', 'mWETH']);
     cleanup();
 
     renderAt(`/vault/${CHAIN}-${OTHER.key}`);
     await waitFor(() => expect(basketSymbols()).toContain(OTHER_MARKER), { timeout: 15_000 });
+    expect(basketSymbols()).not.toContain('ETH');
     expect(basketSymbols()).not.toContain('WETH');
     expect(basketSymbols()).not.toContain('mWETH');
-    // The card offers exactly this vault's tokens.
+    // The card offers exactly this vault's tokens — in kind (the deposit default is the USDG zap).
+    const inKind = () => screen.getByRole('button', { name: /^(Both|All)$/ }) as HTMLButtonElement;
+    await waitFor(() => expect(inKind().disabled).toBe(false), { timeout: 15_000 });
+    act(() => inKind().click());
     await waitFor(() => expect(screen.getByLabelText(`${OTHER_MARKER} amount`)).toBeDefined(), { timeout: 15_000 });
     expect(screen.queryByLabelText(/^m?WETH amount$/)).toBeNull();
   });

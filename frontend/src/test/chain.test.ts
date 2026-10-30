@@ -14,6 +14,7 @@ import {
 import {
   DEFAULT_SLIPPAGE_BPS,
   dispatchBasket,
+  fillAtMix,
   insufficientBalance,
   minSharesFromPreview,
   parseSlippageBps,
@@ -249,5 +250,61 @@ describe('approval + balance checks', () => {
     expect(insufficientBalance(tokens, required, [required[0], required[1]])).toBeNull();
     expect(insufficientBalance(tokens, required, [required[0] - 1n, required[1]])).toBe(USDG);
     expect(insufficientBalance(tokens, required, [required[0], 0n])).toBe(WETH);
+  });
+});
+
+describe('fillAtMix — the other fields follow the mix, and the typed token stays the binding one', () => {
+  const tokens = [{ address: USDG, decimals: 6 }, { address: WETH, decimals: 18 }];
+  const totals = [1_000_000_000n, 4n * 10n ** 17n]; // 1,000 USDG : 0.4 WETH
+  const S = 1_000n * 10n ** 18n;
+  /** The vault's `_bindingShares` candidate for one leg: floor(amount × (S + 1) / (T + 1)). */
+  const candidate = (amount: bigint, total: bigint, supply = S) => (amount * (supply + 1n)) / (total + 1n);
+
+  it('rounds up to 6 dp, never past a balance the mix fits; clearing clears every field', () => {
+    // 1.000001 USDG → 0.0004000003999996… WETH, rounded up to 6 dp: 0.000401
+    expect(fillAtMix(tokens, totals, {}, 0, '1.000001')[WETH]).toBe('0.000401');
+    // the wallet holds exactly the mix: the fill takes the balance, not 1 unit over it
+    expect(fillAtMix(tokens, totals, {}, 0, '1.000001', [1_000_001n, 400_000_400_000_000n])[WETH]).toBe('0.0004000004');
+    // more than the mix but less than the rounded figure: still the balance (≥ the mix, so USDG still sets the deposit)
+    expect(fillAtMix(tokens, totals, {}, 0, '1.000001', [1_000_001n, 400_000_900_000_000n])[WETH]).toBe('0.0004000009');
+    // genuinely short of the mix: the rounded figure stays, and the field is rightly over
+    expect(fillAtMix(tokens, totals, {}, 0, '1.000001', [1_000_001n, 400_000_000_000_000n])[WETH]).toBe('0.000401');
+    expect(fillAtMix(tokens, totals, { [USDG]: '5' }, 1, '')).toEqual({});
+  });
+
+  it('keeps what it cannot size: totals not read, a token the vault does not hold, a typo', () => {
+    expect(fillAtMix(tokens, [0n, 0n], { [WETH]: '1' }, 0, '10')).toEqual({ [USDG]: '10', [WETH]: '1' });
+    expect(fillAtMix(tokens, [totals[0], 0n], { [WETH]: '1' }, 0, '10')).toEqual({ [USDG]: '10', [WETH]: '1' });
+    expect(fillAtMix(tokens, totals, { [WETH]: '1' }, 0, '1.2.3')).toEqual({ [USDG]: '1.2.3', [WETH]: '1' });
+  });
+
+  it('the plain ratio let the filled leg bind (T_i < T_from); the contract ratio (T + 1) never does', () => {
+    // 0.2 WETH: the plain ratio is exactly 500 USDG, whose candidate is below WETH's — USDG would set the deposit
+    // and the vault would pull 0.1999999998 WETH of the 0.2 typed.
+    const typed = 2n * 10n ** 17n;
+    const plain = 500_000_000n;
+    expect(candidate(plain, totals[0])).toBeLessThan(candidate(typed, totals[1]));
+    const filled = fillAtMix(tokens, totals, {}, 1, '0.2')[USDG];
+    expect(filled).toBe('500.000001');
+    expect(candidate(500_000_001n, totals[0])).toBeGreaterThanOrEqual(candidate(typed, totals[1]));
+  });
+
+  it('across mixes, sizes and both directions the typed leg is binding (ties allowed)', () => {
+    const grid = [1n, 7n, 999n, 10n ** 6n, 10n ** 9n + 7n, 4n * 10n ** 17n, 3n * 10n ** 21n];
+    const inputs = ['1', '0.2', '0.000001', '123.456789', '1000000'];
+    for (const tu of grid) for (const tw of grid) for (const supply of [1n, 10n ** 18n, S]) {
+      for (const [from, to] of [[0, 1], [1, 0]] as const) {
+        for (const input of inputs) {
+          const typed = parseAmount(input, tokens[from].decimals);
+          if (!typed.ok || typed.value === 0n) continue;
+          const t = [tu, tw];
+          const raw = fillAtMix(tokens, t, {}, from, input)[tokens[to].address];
+          const amount = parseAmount(raw, tokens[to].decimals);
+          expect(amount.ok).toBe(true);
+          if (!amount.ok) continue;
+          expect(candidate(amount.value, t[to], supply)).toBeGreaterThanOrEqual(candidate(typed.value, t[from], supply));
+        }
+      }
+    }
   });
 });

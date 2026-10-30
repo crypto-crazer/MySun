@@ -14,7 +14,9 @@
  * and (on the mock stack) mint by itself; an Anvil account already at ~10k ETH is left untouched.
  *
  * `anvil_impersonateAccount` / `anvil_setBalance` exist on a local node only; the buttons that
- * call this render only for the local stack (`isLocalChain`), never for a registry chain. Which
+ * call this render only for the local stack (`isLocalChain`), never for a registry chain — and
+ * every call here refuses any other chain, so a production build (no demo chain) cannot reach the
+ * node-only methods at all. Which
  * path a token takes is decided by SIMULATION of `mint` (USDG/WETH revert, the mock's succeeds),
  * so a redeployed stack needs no hardcoded token list.
  */
@@ -22,13 +24,21 @@ import { createClient, http, parseAbi, type Address, type Chain, type Client, ty
 // Standalone actions, not `createWalletClient` — see src/wallet/WalletProvider.tsx.
 import { getBalance, simulateContract, writeContract } from 'viem/actions';
 import { waitForReceipt } from './client';
-import { chainFor } from './chains';
+import { chainFor, isLocalChain } from './chains';
 
 /** The v3 USDG/WETH 0.01% pool — the fork demo's funding source (contracts/script/fork-demo-up.sh). */
 export const FORK_FAUCET_POOL = '0x52e65B17fB6E5BA00Ed806f37Afcd2DaA50271Ca' as Address;
 
 /** Every wallet funded through the local dev tools is raised to at least this much ETH for gas. */
 export const FAUCET_ETH_TOPUP = 10n ** 18n; // 1 ETH
+
+/**
+ * Explicit EIP-1559 fees for the impersonated send. Anvil's own fill is inconsistent once the frozen
+ * demo chain's base fee has decayed (7 wei observed): `eth_fillTransaction` answers a fee cap of a few
+ * wei with a 1 gwei tip, and viem refuses to sign a tip above the cap. One consistent pair, far above
+ * what the chain asks — the pool is topped up to 1 ETH just before every send (same pair as e2e:local).
+ */
+const LOCAL_FEES = { maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n } as const;
 
 const erc20Abi = parseAbi(['function transfer(address to, uint256 value) returns (bool)']);
 const mintAbi = parseAbi(['function mint(address to, uint256 amount)']);
@@ -38,10 +48,11 @@ export function faucetAmount(decimals: number): bigint {
   return (decimals >= 12 ? 10n : 10_000n) * 10n ** BigInt(decimals);
 }
 
-/** A client to the chain's own RPC — the impersonated path never goes through the user's wallet. */
+/** A client to the local chain's own RPC — the impersonated path never goes through the user's wallet. */
 function rpcClient(chainId: number): Client<Transport, Chain> {
   const chain = chainFor(chainId);
   if (!chain) throw new Error(`Chain ${chainId} is not in the registry (shared/deployments.json).`);
+  if (!isLocalChain(chainId)) throw new Error(`Chain ${chainId} is not the local demo chain — the faucet is local-only.`);
   return createClient({ chain, transport: http(chain.rpcUrls.default.http[0]) });
 }
 
@@ -104,6 +115,7 @@ export async function impersonatedFund(
       args: [to, amount],
       account: FORK_FAUCET_POOL,
       chain,
+      ...LOCAL_FEES,
     } as never)) as Hash;
     const receipt = await waitForReceipt(chainId, hash);
     if (receipt.status !== 'success') {

@@ -1,5 +1,5 @@
 import type { BasketLeg } from '@/chain/spot';
-import { TOKEN_COLORS } from '@/demo/data/vaults';
+import { TOKEN_COLORS } from '@/lib/tokenColors';
 import { cx, fmtPct, fmtUsd } from '@/lib/format';
 import { Tooltip } from '@/components/ui/Tooltip';
 

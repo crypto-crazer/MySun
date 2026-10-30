@@ -29,7 +29,7 @@ import type { Address } from './types.js';
 
 export const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 export const VAULT_KEY_RE = /^[a-z][a-z0-9-]*$/;
-/** Every key a vault entry may carry; `demoUser` is the only optional one. */
+/** Every key a vault entry may carry; `planExecutor`, `demoUser` and `staging` are optional. */
 export const VAULT_KEYS = [
   'key',
   'label',
@@ -39,6 +39,7 @@ export const VAULT_KEYS = [
   'keeper',
   'planExecutor',
   'demoUser',
+  'staging',
 ] as const;
 const VAULT_ADDRESS_KEYS = ['vault', 'implementation', 'keeper'] as const;
 const RECEIPT_KEYS = ['name', 'symbol'] as const;
@@ -61,6 +62,8 @@ export interface RegistryVault {
   /** The vault's own PlanExecutor (keeper-composed plans); falls back to the chain's periphery. */
   readonly planExecutor?: Address;
   readonly demoUser?: Address;
+  /** Team-only vault (the FE hides it until team mode is unlocked); only ever `true`. The keeper ignores it. */
+  readonly staging?: true;
 }
 
 export interface RegistryChain {
@@ -139,6 +142,12 @@ function optionalBool(file: string, path: string, v: unknown): boolean | undefin
   return v;
 }
 
+/** `staging` is one-way: present means `true`; absent is the public default, so `false` is a mistake. */
+function stagingFlag(file: string, path: string, v: unknown): true {
+  if (v !== true) fail(file, path, `must be true when present — omit it for a public vault (got ${JSON.stringify(v)})`);
+  return true;
+}
+
 function address(file: string, path: string, v: unknown): Address {
   if (v === undefined) fail(file, path, 'is missing');
   if (typeof v !== 'string' || !ADDRESS_RE.test(v)) {
@@ -192,6 +201,7 @@ function readVault(file: string, path: string, raw: unknown): RegistryVault {
     keeper,
     ...(raw.planExecutor !== undefined ? { planExecutor: address(file, `${path}.planExecutor`, raw.planExecutor) } : {}),
     ...(raw.demoUser !== undefined ? { demoUser: address(file, `${path}.demoUser`, raw.demoUser) } : {}),
+    ...(raw.staging !== undefined ? { staging: stagingFlag(file, `${path}.staging`, raw.staging) } : {}),
   };
 }
 

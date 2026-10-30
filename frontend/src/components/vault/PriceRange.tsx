@@ -50,8 +50,9 @@ export function PriceRange({ pairs, className }: Props) {
   const [host, width] = useElementWidth<HTMLDivElement>();
   const W = Math.max(320, width);
   const [flipped, setFlipped] = useState(false);
-  const [pick, setPick] = useState(0);
-  const pair = pairs[Math.min(pick, pairs.length - 1)];
+  // The chosen pair by its base token, so it stays chosen when the pair list re-forms
+  const [picked, setPicked] = useState<string | null>(null);
+  const pair = pairs.find((p) => p.base === picked) ?? pairs[0];
   if (!pair) return null;
   const inRange = pair.price >= pair.lower && pair.price <= pair.upper;
   // Flipped, every price is its reciprocal, so the two bounds change places
@@ -128,7 +129,7 @@ export function PriceRange({ pairs, className }: Props) {
               <Segmented
                 size="sm"
                 value={pair.base}
-                onChange={(b) => setPick(pairs.findIndex((p) => p.base === b))}
+                onChange={setPicked}
                 options={pairs.map((p) => ({ value: p.base, label: p.base }))}
               />
             )}

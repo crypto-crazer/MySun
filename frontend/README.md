@@ -7,13 +7,21 @@ default): Markets shows the network's TVL and each vault's total deposited, APR 
 page adds the vault token price, the performance fee and the price range (`src/chain/useLiveVaults.ts`),
 and its deposit / withdraw card makes real transactions. A number the chain cannot give
 (anything that needs history — no indexer) is either absent ("—") or, where the design keeps a
-placeholder, comes from `src/demo/` under a **Demo / Illustrative** badge. The per-section contract is
+placeholder, comes from `src/demo/` under an **Illustrative** badge. The per-section contract is
 `docs/LIVE-DATA.md` at the repo root.
 
-**Both chains ship in every build.** The header switcher offers Robinhood Chain (4663, the default)
-and the "Demo Chain" (46630, `shared/deployment.local.json`), whose RPC `resolveLocalRpcUrl` points at
-the host that served the page (laptop, LAN phone) — where the stack is not running its vaults read as
-not reachable.
+**The demo chain ships in local/dev builds only; the public demo is live-only.** Under `pnpm dev`
+(and vitest, `pnpm e2e:local`) the header switcher offers Robinhood Chain (4663, the default) and the
+"Demo Chain" (46630, `shared/deployment.local.json`), whose RPC `resolveLocalRpcUrl` points at the host
+that served the page (laptop, LAN phone) — where the stack is not running its vaults read as not
+reachable. A production build (`pnpm build`, what `pnpm deploy:demo` ships to demo.mysun.dev) drops
+the demo chain from every surface — switcher, vault routes (`/vault/46630-*` is "Vault not found"),
+local dev tools / faucet. The one gate is `demoChainEnabled` in `src/chain/chains.ts`
+(`import.meta.env.DEV`). The deploy path also strips the demo chain's registry DATA (name / RPC /
+addresses) from the artifact: `cf-worker/deploy.sh` builds from a `sync-shared.ts --prod` variant of
+`src/config/generated.ts` (local chain omitted), restores the committed file afterwards, and refuses
+to deploy if `dist/` contains `46630` (`bash cf-worker/deploy.sh --build-only` = the same checks, no
+deploy). Never commit the `--prod` variant — the generator test pins the committed file.
 
 This package uses **pnpm** (`packageManager` is pinned in `package.json`); npm is not used anywhere.
 
@@ -33,7 +41,8 @@ tokens (roles). Only the semantic names become Tailwind utilities, so components
 `bg-fill-weak`, `border-stroke-weak` and cannot reach a raw colour.
 
 - **Gallery:** http://localhost:5173/design-system — tokens and base components, rendered live. It is
-  not linked from the header.
+  not linked from the header, and it is behind team mode: unlock first (7 taps on the footer's brand
+  name), or the address falls through to Markets.
 - **Reference:** [`docs/design-system.md`](docs/design-system.md) — token tables and usage rules.
 
 ## Running against the local chain
@@ -68,8 +77,8 @@ Then in your wallet (MetaMask, Rabby, Coinbase Wallet, Brave, Phantom … — se
    - **Withdraw** — enter the vault's receipt token (or Max), check the in-kind breakdown, withdraw
      (or "USDG only" through the zap).
 
-Without a wallet extension the picker offers **read-only mode** instead: the prototype flows stay
-usable, the vault pages stay read-only. Without a running chain a Demo Chain vault page says so and everything
+Without a wallet extension every vault still reads live — every figure comes from the chain with no
+wallet; deposits and withdrawals need one. Without a running chain a Demo Chain vault page says so and everything
 else keeps working.
 
 If the demo stack is redeployed, re-run `pnpm sync:shared` (addresses are never hand-copied).
@@ -157,15 +166,11 @@ dev tools / mint) appear only on that `local` chain.
 
 ### Multiple vaults per chain
 
-**Which vault the app uses** (`src/chain/vaultSelection.ts`): the vault selected for the target chain,
-if its key still exists there; otherwise — nothing selected yet, a key that vanished after a redeploy,
-anything unreadable in storage — the chain's **first** vault. The choice is kept **per chain** in
-`localStorage` (`mysun.vault.selected`, `{ "<chainId>": "<key>" }`), so switching networks and back
-returns to the vault you were on; opening a vault page records it. The vault page itself always reads
-and writes the vault in its URL (`/vault/<chainId>-<key>`, or a bare `/vault/<key>` when only one chain
-lists that key — otherwise the page asks which), and every React Query key carries the vault address,
-so moving between vaults never shows another vault's data. The header wallet menu's balances follow
-`(target chain, selected vault)`.
+**Which vault a page uses:** the vault page always reads and writes the vault in its URL
+(`/vault/<chainId>-<key>`, or a bare `/vault/<key>` when only one chain lists that key — otherwise the
+page asks which), and every React Query key carries the vault address, so moving between vaults never
+shows another vault's data. Opening a vault page selects its chain in the header; no vault choice is
+stored.
 
 **Which chain the app uses** (the *target chain*, `src/chain/targetChain.ts`):
 
@@ -178,8 +183,9 @@ so moving between vaults never shows another vault's data. The header wallet men
 
 **Switching** (`src/chain/switchChain.ts`): `wallet_switchEthereumChain`; if the wallet answers
 "unknown chain" (4902, also when nested inside a -32603), `wallet_addEthereumChain` with parameters
-built from the registry (`addEthereumChainParams`), then switch again. A rejection is surfaced, never
-retried. Every read, receipt wait and write names its chain explicitly — nothing reads a module-level
+built from the registry (`addEthereumChainParams`, RPC = the chain's own `rpcUrls`), then switch
+again. A rejection is surfaced, never retried. Wallets refuse non-https chain-adds, so on a phone/LAN
+address the demo chain must be added by hand (the error message lists the parameters). Every read, receipt wait and write names its chain explicitly — nothing reads a module-level
 "the chain" constant.
 
 ### WalletConnect (phones and QR)
@@ -206,22 +212,11 @@ demand, so it costs a visitor who connects with a browser extension nothing.
 vault the chart draws them (real timestamps, no badge); unset, unreachable or fewer snapshots → the
 illustrative line under its badge, as before. Build-time: set it in `.env.local` or the build env.
 
-## Demo controls
-
-| Control | How |
-|---|---|
-| Enter read-only mode | **Read-only mode** in the wallet picker |
-| Reset demo state | Click the **MySun** wordmark 5 times within 2.5 s |
-| Force US market status | `?market=closed` / `?market=open` / `?market=auto` (persists until changed) |
-| Force a theme | `?theme=dark` / `?theme=light` (persists; header toggle does the same) |
-
-State is persisted to `localStorage` under `mysun-demo-v1`.
-
 ## Where things live
 
 | Path | What |
 |---|---|
-| `src/chain/` | Chain code: registry-driven chains, target chain + vault selection + switching, per-chain viem clients, live reads, amount math, error decoding |
+| `src/chain/` | Chain code: registry-driven chains, target chain + switching, per-chain viem clients, live reads, amount math, error decoding |
 | `src/wallet/` | The wallet layer: EIP-6963 discovery, WalletConnect, picker modal, connection |
 | `src/config/generated.ts` | The full registry (local overlay included) + ABIs, generated from `../shared` by `pnpm sync:shared` — do not edit. App code reads `CHAINS` / `DEPLOYMENTS` / `vaultsForChain` from `src/chain/chains.ts` (the whole registry, both chains) |
 | `src/chain/useLiveVaults.ts` + `liveVaults.ts` | Every vault live: catalogue reads + reference-pool spots → TVL, spot NAV, fee, keeper (Markets, vault page); `/vault/:id` resolution |
@@ -229,14 +224,12 @@ State is persisted to `localStorage` under `mysun-demo-v1`.
 | `src/components/live/` | Local dev tools (mint / fund my wallet), the network-manual and message blocks |
 | `src/components/ui/DataBadge.tsx` | `Demo data` / `Live on-chain` provenance badges |
 | `src/chain/useNavHistory.ts` + `navHistory.ts` | The vault page's real NAV line: the collector's JSONL (`VITE_NAV_HISTORY_URL`), parsed and cut per vault; `useNavHistoryRows` is the one shared fetch (chart + fee APR); ≥ 6 snapshots → real series, else the illustrative fallback |
-| `src/chain/feeApy.ts` | The design's fee APR (7D): Δ cumulative `feesUsd` over the window ÷ the window's mean `tvlUsd`, × 365 ÷ days, from the same collector rows; a series shorter than the window → "—". Earn table APR column, vault page APR tile + "Your APR" / "Fees earned" |
-| **`src/demo/`** | **Every invented number**: the illustrative NAV line (fallback until the collector has history, badged), plus the legacy prototype data/math and its tests |
-| `src/lib/market.ts` | US market clock (America/New_York, weekdays 09:30–16:00 ET, holidays ignored) |
-| `src/store/useStore.ts` | zustand store (persisted) with deposit / withdraw / stake |
-| `src/store/selectors.ts` | Derived hooks shared by Explore, Vault and Rewards |
+| `src/chain/feeApy.ts` | The fee APR: fees accrued over the last 24 h (upward steps of each leg's pending fees, so harvests count) ÷ the window's mean `tvlUsd`, × 365, net of the performance fee, from the same collector rows; "—" below `MIN_FEE_APR_DAYS` (a day of rows, less slack for the cron's drift). Earn table APR column, vault page APR tile + "Your APR" / "Fees earned" |
+| **`src/demo/`** | **The one invented line**: the vault chart's illustrative NAV path (`series.ts`), drawn only when there is no history to show (no source, a failed fetch, too few snapshots), always badged |
+| `src/store/useStore.ts` | zustand store: toasts, and the wallet account mirrored by `useWalletBridge` (the hero's connect gate). Not persisted |
 | `src/components/deposit/DepositCard.tsx` | The original deposit / withdraw card on the vault page (and over Markets via `?deposit=`), wired to real reads and writes |
 | `src/components/vault/PriceRange.tsx` | The range as an instrument: the live spot between the adapters' on-chain range (`src/chain/ranges.ts` + `ticks.ts`, read by `useVaultRanges`) |
-| `src/test/` | Spec anchors, store consistency, chain helpers, multi-chain registry + switching, multi-vault registry + selection, vault pages, wallet picker, render smoke test |
+| `src/test/` | Chain helpers, multi-chain registry + switching, multi-vault registry + selection, vault pages, wallet picker, render smoke test |
 | `scripts/` | `sync-shared.ts` (CLI) + `generate.ts` (pure render) + `registry.ts` (validation), `e2e-local.ts` (viem end-to-end) |
 
 ## Brand

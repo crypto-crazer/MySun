@@ -12,6 +12,11 @@ interface ImportMetaEnv {
    * price chart keeps its illustrative line (badged).
    */
   readonly VITE_NAV_HISTORY_URL?: string;
+  /**
+   * SHA-256 (64 hex) of the team access code — unlocks team mode (the registry's `staging` vaults;
+   * src/lib/teamMode.ts). Unset or malformed ⇒ team mode is off. Never commit a real hash.
+   */
+  readonly VITE_GOLDEN_FINGER_SHA256?: string;
 }
 
 interface ImportMeta {

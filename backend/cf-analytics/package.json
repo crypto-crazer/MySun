@@ -1,0 +1,22 @@
+{
+  "name": "@mysun/cf-analytics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MySun NAV/fee collector as a Cloudflare Worker + Workers KV (port of backend/src/collect-nav.ts).",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@12.5.1",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "deploy": "WRANGLER_SEND_METRICS=false wrangler deploy"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^5.0.1",
+    "wrangler": "^4.0.0"
+  }
+}

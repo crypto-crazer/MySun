@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
- * Chain switching, mounted for real: the header network selector (both registry chains, in every
- * build), and a wallet parked on a chain without a deployment being walked through switch → add
+ * Chain switching, mounted for real: the header network selector (both registry chains in a
+ * local/dev build — vitest is one; the production gate is demochain-gate.test), and a wallet parked on a chain without a deployment being walked through switch → add
  * chain → switch from the vault page's wrong-network banner.
  *
  * Same rule as the picker test: no mocking of the app's wallet layer. The only fake is the wallet —
@@ -20,6 +20,7 @@ import { addEthereumChainParams } from '@/chain/switchChain';
 import { Layout } from '@/components/layout/Layout';
 import { Markets } from '@/pages/Markets';
 import { VaultDetail } from '@/pages/VaultDetail';
+import { chainSymbols } from './chainSymbols';
 
 /* Test-environment shims (see render.test / picker.test for why): cross-realm AbortSignal, and a
    node global `localStorage` that shadows jsdom's. Neither exists in a real browser. */
@@ -51,10 +52,6 @@ if (!window.localStorage) {
 }
 
 const LOCAL = 'Demo Chain';
-/** A basket token symbol: the mock stack's m-prefixed tokens, or the RHC fork's REAL USDG / WETH. */
-const BASKET_SYMBOL = /^(m[A-Z]+|USDG|WETH)$/;
-/** Basket symbols in the basket table: only the chain puts them there (the deposit card names USDG, its zap token, on its own). */
-const chainSymbols = () => screen.queryAllByText(BASKET_SYMBOL).filter((e) => e.closest('table'));
 const ACCOUNT = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
 
 /** A wallet parked on chain 1 (no registry entry → no deployment) that has never heard of the local chain. */
@@ -138,7 +135,7 @@ describe('network selector — no wallet', () => {
     const selector = await screen.findByRole('button', { name: 'Network: Robinhood Chain' });
     await act(async () => selector.click());
 
-    // Every build offers the demo chain in the switcher, next to mainnet.
+    // A local/dev build offers the demo chain in the switcher, next to mainnet.
     const list = screen.getByRole('listbox', { name: 'Networks' });
     expect(within(list).getAllByRole('option')).toHaveLength(2);
     expect(within(list).getByText('chain id 4663')).toBeDefined(); // deployed — no "no deployment" marker

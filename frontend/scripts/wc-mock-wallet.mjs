@@ -11,7 +11,12 @@
 import { Core } from '@walletconnect/core';
 import { SignClient } from '@walletconnect/sign-client';
 
-const PROJECT_ID = process.env.VITE_WALLETCONNECT_PROJECT_ID || 'ee4a71aa9caf4bdb99ce04aaaacb1552';
+// The app's own project id (frontend/.env.local); required — never commit a real id here.
+const PROJECT_ID = process.env.VITE_WALLETCONNECT_PROJECT_ID;
+if (!PROJECT_ID) {
+  console.error('set VITE_WALLETCONNECT_PROJECT_ID (the id in frontend/.env.local), e.g. `set -a; . ./.env.local; set +a`');
+  process.exit(1);
+}
 const ADDRESS = '0x1111111111111111111111111111111111111111';
 const uri = process.argv[2];
 if (!uri || !uri.startsWith('wc:')) {

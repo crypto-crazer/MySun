@@ -1,5 +1,5 @@
-import { TOKEN_COLORS } from '@/demo/data/vaults';
-import type { ChainId } from '@/demo/data/chains';
+import { TOKEN_COLORS } from '@/lib/tokenColors';
+import type { ChainId } from '@/lib/chainBrands';
 import { ChainLogo } from './ChainLogo';
 import { cx } from '@/lib/format';
 import eth from '@/assets/tokens/eth.svg';
@@ -7,16 +7,23 @@ import usdg from '@/assets/tokens/usdg.png';
 import nvda from '@/assets/tokens/nvda.svg';
 import spcx from '@/assets/tokens/spcx.svg';
 import spy from '@/assets/tokens/spy.svg';
+import gld from '@/assets/tokens/gld.svg';
+import crcl from '@/assets/tokens/crcl.svg';
+import tsla from '@/assets/tokens/tsla.svg';
+import aapl from '@/assets/tokens/aapl.svg';
+import amzn from '@/assets/tokens/amzn.svg';
+import intc from '@/assets/tokens/intc.svg';
+import mu from '@/assets/tokens/mu.svg';
+import mstr from '@/assets/tokens/mstr.svg';
 import pons from '@/assets/tokens/pons.png';
-import cashcat from '@/assets/tokens/cashcat.png';
 
 /**
  * Real marks, each one square and full-bleed so it sits in the same square-cut tile as everything
- * else (a round original has its ground extended to the corners). The three stock tokens share one
+ * else (a round original has its ground extended to the corners). The stock tokens share one
  * official icon, so each shows its company's mark instead. Where each file comes from:
  * src/assets/tokens/SOURCES.md. A token without a mark falls back to the lettered tile.
  */
-const TOKEN_ART: Record<string, string> = { ETH: eth, WETH: eth, USDG: usdg, NVDA: nvda, SPCX: spcx, SPY: spy, PONS: pons, CASHCAT: cashcat };
+const TOKEN_ART: Record<string, string> = { ETH: eth, WETH: eth, USDG: usdg, NVDA: nvda, SPY: spy, SPCX: spcx, GLD: gld, CRCL: crcl, TSLA: tsla, AAPL: aapl, AMZN: amzn, INTC: intc, MU: mu, MSTR: mstr, PONS: pons };
 
 /** A token as a square tile: its own mark, or its initial with the token's colour as a rule along the bottom edge. */
 export function TokenIcon({ symbol, size = 22, className }: { symbol: string; size?: number; className?: string }) {

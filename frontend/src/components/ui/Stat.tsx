@@ -41,6 +41,8 @@ export function Stat({ label, value, sub, tone = 'default', size = 'md', classNa
  * A row of readings on an engraved scale: each one hangs from a tick on the rule.
  * No panel and no dividers; the rule is the structure.
  * Below md the readings wrap into two columns, so each one carries its own short rule instead.
+ * The app uses the default (4 columns, ruled); `cols` 2/3/5, `packed` and `rule={false}` are
+ * gallery-only variants (design-system DataDisplay), kept as the system's documented range.
  */
 export function StatRow({ children, className, cols = 4, packed, rule = true }: { children: ReactNode; className?: string; cols?: 2 | 3 | 4 | 5;/** readings keep their own width and sit together at the start of the rule */ packed?: boolean; /** false: from md up the readings stand alone, with no rule and no ticks */ rule?: boolean }) {
   return (

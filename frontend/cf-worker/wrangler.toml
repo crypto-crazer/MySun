@@ -4,8 +4,8 @@ compatibility_date = "2026-10-01"
 account_id = "c53b147ee4dff886f6e1e733cb85adea"
 
 # The public demo hostname is intercepted at Cloudflare's edge by this worker
-# (no DNS change needed): static frontend assets always serve; /rpc proxies to
-# the home tunnel (chain.mysun.dev) which is only up while the Mac is on.
+# (no DNS change needed): static frontend assets always serve; nothing is
+# proxied (the home tunnel chain.mysun.dev is retired).
 routes = [
   { pattern = "demo.mysun.dev/*", zone_name = "mysun.dev" }
 ]

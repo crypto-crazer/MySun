@@ -9,14 +9,18 @@
  * "cannot reach the vault" state rather than blow up, so this test passes either way.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { WalletContext, useWallet } from '@/wallet/context';
 import { ChainProviders } from '@/chain/Providers';
 import { DEPLOYMENTS } from '@/chain/chains';
+import { BRAND } from '@/lib/brand';
 import { Layout } from '@/components/layout/Layout';
 import { Markets } from '@/pages/Markets';
 import { useStore } from '@/store/useStore';
 import { VaultDetail } from '@/pages/VaultDetail';
+import { chainSymbols } from './chainSymbols';
 
 /**
  * Test-environment shim, not an app concern: viem attaches a Node `AbortSignal` for its request
@@ -35,27 +39,30 @@ class RequestWithoutSignal extends JsdomRequest {
 globalThis.Request = RequestWithoutSignal as typeof Request;
 globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => jsdomFetch(input, stripSignal(init))) as typeof fetch;
 
-function renderAt(path: string) {
-  return render(
-    <ChainProviders>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<Markets />} />
-            <Route path="/vault/:id" element={<VaultDetail />} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    </ChainProviders>,
+const ACCOUNT = '0x0000000000000000000000000000000000000001';
+
+/** The wallet layer reporting a connected account — what the app's own bridge mirrors into the store. */
+function ConnectedWallet({ children }: { children: ReactNode }) {
+  const wallet = useWallet();
+  return <WalletContext.Provider value={{ ...wallet, status: 'connected', address: ACCOUNT }}>{children}</WalletContext.Provider>;
+}
+
+function renderAt(path: string, { connected = false }: { connected?: boolean } = {}) {
+  const routes = (
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<Markets />} />
+          <Route path="/vault/:id" element={<VaultDetail />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>
   );
+  return render(<ChainProviders>{connected ? <ConnectedWallet>{routes}</ConnectedWallet> : routes}</ChainProviders>);
 }
 
 /** The demo chain's flagship vault — the page that reads the local node. */
 const DEMO_VAULT = `/vault/${DEPLOYMENTS.find((d) => d.local)!.chainId}-${DEPLOYMENTS.find((d) => d.local)!.vaults[0].key}`;
-/** A basket token symbol: the mock stack's m-prefixed tokens, or the RHC fork's REAL USDG / WETH. */
-const BASKET_SYMBOL = /^(m[A-Z]+|USDG|WETH)$/;
-/** Basket symbols in the basket table: only the chain puts them there (the deposit card names USDG, its zap token, on its own). */
-const chainSymbols = () => screen.queryAllByText(BASKET_SYMBOL).filter((e) => e.closest('table'));
 
 afterEach(cleanup);
 
@@ -64,11 +71,15 @@ describe('app renders without a wallet', () => {
     const { container } = renderAt('/');
     expect(await screen.findByRole('heading', { name: 'Vaults' })).toBeDefined();
     // Rows come from the registry this build offers (chain × vault), never from src/demo — and the
-    // table follows the header's chain: default (mainnet 4663) shows only that chain's vaults.
+    // table follows the header's chain: default (mainnet 4663) shows only that chain's vaults. Team
+    // mode is locked by default (this build has no access-code hash), so the registry's staging vaults
+    // are not listed — teamgate.test.tsx covers the unlocked table.
     const rows = [...container.querySelectorAll('li[data-vault]')].map((r) => r.getAttribute('data-vault')).sort();
-    const mainnetVaults = DEPLOYMENTS.find((d) => d.chainId === 4663)?.vaults ?? [];
+    const mainnetVaults = (DEPLOYMENTS.find((d) => d.chainId === 4663)?.vaults ?? []).filter((v) => !v.staging);
     expect(rows).toEqual(mainnetVaults.map((v) => `4663-${v.key}`).sort());
-    expect(screen.queryByText('NVDA / USDG')).toBeNull();
+    expect(screen.queryByText(/^Staging$/i)).toBeNull();
+    // (the prototype's CASHCAT / ETH vault, and CASHCAT itself, are gone; the guard stays)
+    expect(screen.queryByText(/CASHCAT/)).toBeNull();
     // The design's fee-APR column is there, but with no collector feed configured every cell is "—"
     // (never an invented figure); still no volume column, and no Demo badge on the page.
     expect(screen.getAllByText(/^APR$/).length).toBeGreaterThan(0);
@@ -90,16 +101,43 @@ describe('app renders without a wallet', () => {
   it('the hero offers Connect wallet beside the header until a wallet is connected, deposits or not', () => {
     renderAt('/');
     expect(screen.getAllByRole('button', { name: 'Connect wallet' })).toHaveLength(2);
+    expect(screen.getByRole('heading', { level: 1, name: /Markets move/ })).toBeDefined();
+    expect(useStore.getState()).toMatchObject({ connected: false, address: null });
     cleanup();
-    // Connected with nothing deposited: the title stays, neither connect button does
-    useStore.setState({ connected: true, readOnlyMode: true });
+    // A real account (the wallet layer → Layout's bridge → the store), nothing deposited: neither
+    // connect button stays — the header shows the account, the hero "Your deposits" at $0.00.
+    renderAt('/', { connected: true });
+    expect(useStore.getState()).toMatchObject({ connected: true, address: ACCOUNT });
+    expect(screen.queryAllByRole('button', { name: 'Connect wallet' })).toEqual([]);
+    expect(screen.getByRole('button', { name: /0x0000…0001/ })).toBeDefined();
+    expect(screen.getByText('Your deposits')).toBeDefined();
+    cleanup();
+    // The account goes away → the bridge clears the mirror and both buttons come back.
+    renderAt('/');
+    expect(useStore.getState()).toMatchObject({ connected: false, address: null });
+    expect(screen.getAllByRole('button', { name: 'Connect wallet' })).toHaveLength(2);
+  });
+
+  it('a connected store with no account from the wallet yet (mid-switch): the title stays, neither connect button does', () => {
+    renderAt('/');
+    // The bridge holds the last account while the wallet reports "connecting" (no address).
+    act(() => useStore.setState({ connected: true, address: ACCOUNT }));
     try {
-      renderAt('/');
       expect(screen.getByRole('heading', { level: 1, name: /Markets move/ })).toBeDefined();
       expect(screen.queryAllByRole('button', { name: 'Connect wallet' })).toEqual([]);
     } finally {
-      useStore.setState({ connected: false, readOnlyMode: false });
+      act(() => useStore.setState({ connected: false, address: null }));
     }
+  });
+
+  it('the wallet picker offers no read-only mode: browsing needs no wallet, depositing does', () => {
+    renderAt('/');
+    act(() => screen.getAllByRole('button', { name: 'Connect wallet' })[0].click());
+    expect(screen.getByRole('dialog')).toBeDefined();
+    expect(screen.queryByRole('button', { name: /Read-only/i })).toBeNull();
+    expect(screen.queryByText(/prototype|demo data|Read-only/i)).toBeNull();
+    // jsdom announces no EIP-6963 wallet, so the picker explains what a wallet is for.
+    expect(screen.getByText(/No browser wallet detected/).textContent).toMatch(/to deposit — every vault can be browsed without one/);
   });
 
   it('the demo-chain vault page renders the original layout and shows no invented APR (APR —)', async () => {
@@ -115,6 +153,8 @@ describe('app renders without a wallet', () => {
 
   it('the demo-chain vault page shows chain-read basket data, or says why it cannot', async () => {
     renderAt(DEMO_VAULT);
+    // Before any read lands no basket symbol is on the page — not even the zap token: they only come from the chain
+    expect(chainSymbols()).toEqual([]);
     await waitFor(
       () => {
         const reached = chainSymbols().length > 0;
@@ -132,5 +172,25 @@ describe('app renders without a wallet', () => {
       act(() => screen.getByRole('button', { name: /^(Both|All)$/ }).click());
       await waitFor(() => expect(screen.getAllByLabelText(/^(m[A-Z]+|USDG|WETH) amount$/).length).toBeGreaterThan(1), { timeout: 10_000 });
     }
+  });
+});
+
+describe('the header wordmark', () => {
+  /**
+   * Regression: the wordmark used to hide a demo reset — 5 clicks inside 2.5 s cleared the store and
+   * pushed "Demo reset · Wallet disconnected". That read as a bug now the app is live, and it collided
+   * with team mode's own 7-tap secret on the *footer* brand (./TeamMode.tsx): a visitor tapping either
+   * brand mark hit the wrong one. The wordmark leads home and does nothing else.
+   */
+  it('carries no hidden reset — five quick taps leave a connected wallet alone', () => {
+    renderAt('/', { connected: true });
+    const logo = screen.getByRole('link', { name: BRAND.name });
+    for (let i = 0; i < 5; i++) act(() => { fireEvent.click(logo); });
+    const s = useStore.getState();
+    expect(s.connected).toBe(true);
+    expect(s.address).toBe(ACCOUNT);
+    expect(s.toasts).toEqual([]);
+    expect(screen.queryByText(/Demo reset/i)).toBeNull();
+    expect(screen.queryAllByRole('button', { name: 'Connect wallet' })).toEqual([]);
   });
 });

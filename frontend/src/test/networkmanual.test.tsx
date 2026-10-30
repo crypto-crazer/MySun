@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
- * NetworkManual — the hand-add parameters: the rows mirror manualNetworkParams (registry, tunnel
- * override included), and the LAN-address reminder belongs to the demo stack only: a hosted
+ * NetworkManual — the hand-add parameters: the rows mirror manualNetworkParams (the registry's own
+ * values), and the LAN-address reminder belongs to the demo stack only: a hosted
  * chain's RPC never moves.
  */
 import { afterEach, describe, expect, it } from 'vitest';

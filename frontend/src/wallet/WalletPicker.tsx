@@ -3,11 +3,9 @@
  *
  * Names and icons are whatever the wallet announced over EIP-6963 — nothing here is a hardcoded
  * list of "supported" wallets, which is the point of the rework. WalletConnect appears only when a
- * project id is configured, and read-only mode stays available so the prototype works on a laptop
- * with no extension at all.
+ * project id is configured. No wallet is needed to browse: every figure is read from the chain
+ * without one; a wallet is needed to deposit or withdraw.
  */
-import { useStore } from '@/store/useStore';
-import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { useWallet } from './context';
@@ -15,7 +13,6 @@ import type { WalletOption } from './types';
 
 export function WalletPicker() {
   const { pickerOpen, closePicker, options, connect, status, error, pendingId } = useWallet();
-  const enterReadOnlyMode = useStore((s) => s.enterReadOnlyMode);
   const connecting = status === 'connecting';
 
   return (
@@ -23,7 +20,7 @@ export function WalletPicker() {
       {options.length === 0 ? (
         <p className="text-weak leading-snug">
           No browser wallet detected. Install MetaMask, Rabby, Coinbase Wallet or any other EIP-6963
-          wallet to use the live vault, or browse the prototype with demo data.
+          wallet to deposit — every vault can be browsed without one.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -46,26 +43,7 @@ export function WalletPicker() {
         </p>
       )}
 
-      <div className="mt-4 pt-3 border-t border-stroke-weak">
-        <div className="flex items-start justify-between gap-3">
-          <p className="text-2xs text-weaker leading-snug">
-            No wallet, or just looking around? Read-only mode opens every prototype surface with
-            demo data — the live vault stays read-only.
-          </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="shrink-0"
-            onClick={() => {
-              void enterReadOnlyMode();
-              closePicker();
-            }}
-          >
-            Read-only mode
-          </Button>
-        </div>
-        <WalletConnectHint />
-      </div>
+      <WalletConnectHint />
     </Modal>
   );
 }
@@ -123,7 +101,7 @@ function WalletConnectHint() {
   const { options } = useWallet();
   if (options.some((o) => o.kind === 'walletconnect')) return null;
   return (
-    <p className="mt-2 text-2xs text-weaker leading-snug">
+    <p className="mt-4 pt-3 border-t border-stroke-weak text-2xs text-weaker leading-snug">
       Mobile and QR wallets need a free WalletConnect project id in{' '}
       <span className="num">VITE_WALLETCONNECT_PROJECT_ID</span> — see the README.
     </p>

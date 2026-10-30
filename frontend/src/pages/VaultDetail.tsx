@@ -3,19 +3,22 @@
  * lists that key), as the original vault page laid it out — stats, the deposit / withdraw card in
  * the side column, the price range, the basket, the price chart — read live
  * (src/chain/useLiveVaults.ts + src/chain/useVault.ts): TVL and spot NAV at the reference pools'
- * live spot, receipt supply, performance fee, the basket composition and the exact spot
+ * live spot, the performance fee, the basket composition and the exact spot
  * prices used, and the price range: the live spot between the adapters' on-chain range
  * (src/chain/useVaultRanges.ts). The card's deposits and withdrawals are real transactions on this
  * vault's chain. Mocked: the price chart's line only (no history on chain), under an Illustrative badge — never
  * the live price or the spot-NAV readout. The fee APR (stat row + "Your APR") and "Fees earned" come from the
- * NAV-history collector (src/chain/feeApy.ts) through the chart's own fetch; "—" until 7 days are covered.
+ * NAV-history collector (src/chain/feeApy.ts) through the chart's own fetch; "—" until a day of rows
+ * exists (MIN_FEE_APR_DAYS). The APR's one hint, shared with the vault list, is FEE_APR_HINT.
+ * A staging vault (team mode only) gets no region treatment on this page: the header's Staging chip
+ * is the only hint, by the owner's call.
  */
 import { useEffect, useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useWallet } from '@/wallet/context';
-import { DEPLOYMENTS, chainFor, chainLabel, findVault, isLocalChain } from '@/chain/chains';
+import { chainFor, chainLabel, findVault, isLocalChain } from '@/chain/chains';
 import { formatAmount, formatAmountSignificant, shortHex } from '@/chain/amounts';
-import { basketName, basketOrder, displaySymbol, feeLabel, holdingUsd, resolveVaultRouteId, tokenUsdPrices, vaultRouteId } from '@/chain/liveVaults';
+import { basketName, basketOrderIndices, displaySymbol, feeLabel, holdingUsd, resolveVaultRouteId, tokenUsdPrices, vaultRouteId } from '@/chain/liveVaults';
 import { USD_ANCHOR_SYMBOL, spotUsdPerToken } from '@/chain/spot';
 import { anchorOf, useLiveVaults, type LiveVaultRow } from '@/chain/useLiveVaults';
 import { useOpenVault, useSwitchToChain } from '@/chain/useTargetChain';
@@ -23,14 +26,14 @@ import { useLiveVaultAt, useUserBasket } from '@/chain/useVault';
 import { describeSwitchError } from '@/chain/switchChain';
 import type { ChainSpots } from '@/chain/useSpotPrices';
 import { useVaultRanges } from '@/chain/useVaultRanges';
-import { FEE_APR_WINDOW_DAYS, feeApyPct, fmtFeeApr, latestFeesUsd } from '@/chain/feeApy';
+import { useVisibleDeployments } from '@/chain/useVaultCatalog';
+import { FEE_APR_HINT, FEE_APR_WINDOW_DAYS, feeAprWindowDays, feeApyPct, feesEarnedUsd, fmtFeeApr, fmtFeeAprWindow } from '@/chain/feeApy';
 import { useNavHistoryRows } from '@/chain/useNavHistory';
 import { cx, fmtPct, fmtPrice, fmtUsd } from '@/lib/format';
 import { TokenGroup } from '@/components/ui/TokenIcon';
 import { Stat, StatRow } from '@/components/ui/Stat';
 import { Button } from '@/components/ui/Button';
 import { Hint, Tooltip } from '@/components/ui/Tooltip';
-import { LiveBadge } from '@/components/ui/DataBadge';
 import { NavChart } from '@/components/vault/NavChart';
 import { BasketBar } from '@/components/vault/BasketBar';
 import { PriceRange } from '@/components/vault/PriceRange';
@@ -38,13 +41,14 @@ import { rangePairsFor } from '@/components/vault/rangePairs';
 import { DepositCard } from '@/components/deposit/DepositCard';
 import { LocalDevPanel } from '@/components/live/LocalDevPanel';
 import { Message } from '@/components/live/Message';
-import { NetworkManual } from '@/components/live/NetworkManual';
 
 export function VaultDetail() {
   const { id = '' } = useParams();
   const { address } = useWallet();
   const { rows, spotsFor } = useLiveVaults(address ?? undefined);
-  const resolved = resolveVaultRouteId(id, DEPLOYMENTS);
+  // Team mode: a staging vault resolves only while unlocked; locked, its id is just "not found".
+  const deployments = useVisibleDeployments();
+  const resolved = resolveVaultRouteId(id, deployments);
   if (resolved.kind === 'ambiguous') {
     return (
       <div className="wrap pt-6 text-base text-weaker">
@@ -81,24 +85,30 @@ function VaultView({ row, spots }: { row: LiveVaultRow; spots: ChainSpots }) {
   const openVault = useOpenVault();
   const { switchTo, switching, error: switchError } = useSwitchToChain();
   // The vault the card reads and writes: this page's vault, whatever the header or wallet points at.
-  const vault = useLiveVaultAt(v.chainId, v.entry);
+  const vault = useLiveVaultAt(v.chainId, v.entry, v);
   const user = useUserBasket(address ?? undefined, vault);
   const usdPrices = useMemo(() => tokenUsdPrices(v.tokens, spots.spots), [v.tokens, spots.spots]);
   const { bands } = useVaultRanges(v.chainId, v.address, v.tokens);
   const pairs = useMemo(() => rangePairsFor(v.tokens, usdPrices, bands), [v.tokens, usdPrices, bands]);
-  // Looking at a vault selects its chain (and remembers the vault) in the header — no wallet prompt.
-  useEffect(() => openVault(v.chainId, v.entry.key), [openVault, v.chainId, v.entry.key]);
-  // The fee APR and cumulative fees: the collector's rows, the same fetch the NAV chart reads.
+  // Looking at a vault selects its chain in the header — no wallet prompt.
+  useEffect(() => openVault(v.chainId), [openVault, v.chainId]);
+  // The fee APR and fees earned: the collector's rows, the same fetch the NAV chart reads. Both count
+  // harvests already swept back into the vault, not just the pending balance (see chain/feeApy.ts).
   const { rows: history } = useNavHistoryRows();
   const earnings = useMemo(
-    () => ({ apr: feeApyPct(history, v.entry.key, FEE_APR_WINDOW_DAYS, v.chainId), fees: latestFeesUsd(history, v.entry.key, v.chainId) }),
+    () => ({
+      apr: feeApyPct(history, v.entry.key, FEE_APR_WINDOW_DAYS, v.chainId),
+      // The hours the figure really covers: the full 24 h once the series is that old, less while it fills.
+      aprWindow: fmtFeeAprWindow(feeAprWindowDays(history, v.entry.key, FEE_APR_WINDOW_DAYS, v.chainId)),
+      fees: feesEarnedUsd(history, v.entry.key, v.chainId),
+    }),
     [history, v.entry.key, v.chainId],
   );
 
-  const symbols = basketOrder(v.tokens.map((t) => t.symbol));
   // The legs follow the on-chain order; the bar, its legend and the table read in the name's
-  const order = symbols.map((s) => v.tokens.findIndex((t) => t.symbol === s));
-  const name = basketName(v.ready ? symbols : [], v.entry.label);
+  const order = basketOrderIndices(v.tokens);
+  const symbols = order.map((i) => v.tokens[i].symbol);
+  const name = basketName(symbols, v.entry.label);
   const usd = (x: number | undefined, cents = true) => (x === undefined ? '—' : fmtUsd(x, { cents }));
   const wrongChain = Boolean(address) && chainId !== v.chainId;
   const switchTarget = chainFor(v.chainId);
@@ -124,7 +134,6 @@ function VaultView({ row, spots }: { row: LiveVaultRow; spots: ChainSpots }) {
               <h1 className="title !font-normal text-[length:var(--name)]">{name}</h1>
               <p className="num mt-2 flex flex-wrap items-center gap-2 text-base text-weak">
                 {v.entry.receipt.symbol} · {v.chainName} · <span title={v.address}>{shortHex(v.address)}</span>
-                <LiveBadge />
               </p>
             </div>
           </div>
@@ -143,7 +152,7 @@ function VaultView({ row, spots }: { row: LiveVaultRow; spots: ChainSpots }) {
               {switchError && switchTarget && <Message tone="error">{describeSwitchError(switchError, switchTarget)}</Message>}
             </div>
           )}
-          <StatRow cols={4}>
+          <StatRow>
             <Stat label="Total deposited" value={usd(valuation.usd)} sub={valuation.unpriced.length > 0 ? `no price for ${valuation.unpriced.join(', ')}` : undefined} />
             {/* The fee APR alone, as the original design's stat row drew it */}
             <Stat label="APR" value={fmtFeeApr(earnings.apr)} />
@@ -153,9 +162,9 @@ function VaultView({ row, spots }: { row: LiveVaultRow; spots: ChainSpots }) {
         </header>
 
         <aside className="grid gap-4 lg:sticky lg:top-20 lg:col-start-2 lg:row-span-4 lg:row-start-1">
-          {address && <YourPosition row={row} apr={earnings.apr} fees={earnings.fees} />}
-          <DepositCard vault={vault} user={user} usdPrices={usdPrices} nav={nav} showVaultLink={false} symbols={v.ready ? symbols : undefined} />
-          {wrongChain && <NetworkManual chainId={v.chainId} />}
+          {address && <YourPosition row={row} apr={earnings.apr} aprWindow={earnings.aprWindow} fees={earnings.fees} />}
+          {/* On the wrong network the card's own footer carries "Add the network by hand", as in the Markets overlay: no second copy here */}
+          <DepositCard vault={vault} user={user} usdPrices={usdPrices} nav={nav} showVaultLink={false} />
           {/* Demo chain only, with no wallet on another network: fund the wallet from the local node. */}
           {isLocalChain(v.chainId) && !wrongChain && vault.tokens.length > 0 && <LocalDevPanel vault={vault} user={user} />}
         </aside>
@@ -188,14 +197,15 @@ function VaultView({ row, spots }: { row: LiveVaultRow; spots: ChainSpots }) {
                 const leg = valuation.legs[i];
                 const anchor = anchorOf(v.tokens);
                 const price = t.symbol === USD_ANCHOR_SYMBOL ? 1 : leg?.spot && anchor ? spotUsdPerToken(leg.spot, t.decimals, anchor.decimals) : undefined;
+                const priceText = price === undefined ? '—' : fmtPrice(price);
                 return (
                   <tr key={t.address} className="border-b border-stroke-weak">
                     <td className="py-3 text-strong">
                       <div>{displaySymbol(t.symbol)}</div>
-                      <div className="text-xs text-weaker sm:hidden">{price === undefined ? '—' : fmtPrice(price)}</div>
+                      <div className="text-xs text-weaker sm:hidden">{priceText}</div>
                     </td>
                     <td className="py-3 text-right text-strong">{formatAmount(t.total, t.decimals, 6)}</td>
-                    <td className="hidden py-3 text-right text-weak sm:table-cell">{price === undefined ? '—' : fmtPrice(price)}</td>
+                    <td className="hidden py-3 text-right text-weak sm:table-cell">{priceText}</td>
                     <td className="py-3 text-right text-weak">{usd(leg?.usd)}</td>
                     {yours && <td className="py-3 text-right text-strong">{yoursReady ? formatAmount(yours.get(t.address.toLowerCase()) ?? 0n, t.decimals, 6) : '—'}</td>}
                   </tr>
@@ -214,9 +224,20 @@ function VaultView({ row, spots }: { row: LiveVaultRow; spots: ChainSpots }) {
 
 /**
  * The wallet's live holding: receipt balance, and its slice of the spot TVL — then the original design's
- * earnings rows: the vault's cumulative harvested fees, and the fee APR (7-day average, annualised).
+ * earnings rows: the vault's fees earned to date (harvested plus still unclaimed), and the fee APR
+ * (annualised over the last 24 hours).
  */
-function YourPosition({ row: { v, valuation }, apr, fees }: { row: LiveVaultRow; apr: number | undefined; fees: number | undefined }) {
+function YourPosition({
+  row: { v, valuation },
+  apr,
+  aprWindow,
+  fees,
+}: {
+  row: LiveVaultRow;
+  apr: number | undefined;
+  aprWindow: string | undefined;
+  fees: number | undefined;
+}) {
   if (!v.receiptBalance) return null;
   const value = holdingUsd(v.receiptBalance, v.supply, valuation.usd);
   return (
@@ -232,9 +253,14 @@ function YourPosition({ row: { v, valuation }, apr, fees }: { row: LiveVaultRow;
           label="Fees earned"
           value={fees === undefined ? '—' : fmtUsd(fees, { compact: false, cents: true })}
           tone={fees === undefined ? 'text-weaker' : 'text-success'}
-          tip={`Trading fees the vault has harvested, all holders together. Fees compound into your ${v.entry.receipt.symbol} automatically. Nothing to claim.`}
+          tip={`Trading fees the vault has earned in total, all holders together. They compound into your ${v.entry.receipt.symbol} automatically — nothing to claim.`}
         />
-        <Row label="Your APR" value={fmtFeeApr(apr)} sub="7-day average, annualised" tip="From trading fees: the 7-day average, annualised." />
+        <Row
+          label="Your APR"
+          value={fmtFeeApr(apr)}
+          sub={aprWindow}
+          tip={FEE_APR_HINT}
+        />
       </dl>
     </section>
   );

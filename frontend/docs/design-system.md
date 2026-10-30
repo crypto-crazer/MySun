@@ -431,6 +431,7 @@ outside the gallery.
 | TierBadge, RangeStatusBadge | `Badge.tsx` | No |
 | Pill | `Badge.tsx` | Yes |
 | DemoBadge, LiveBadge, DataLegend | `DataBadge.tsx` | Yes |
+| PreviewRegion, PreviewMark | `Preview.tsx` | Yes, on a ROW of content that is not public yet (team mode): a `fill-warning` left edge fading down, a one-step dim (`text-strong` → `text-weak`, `text-weak` → `text-weaker`) that never reaches a link, a button or the row's name (`data-preview-keep`), full contrast on hover / focus-within, and an sr-only "Not public yet". No word on the content. Rows only — a page carries none (the header's chip is its hint); the vault list's row is today's single caller |
 | TokenIcon, TokenPair | `TokenIcon.tsx` | Yes |
 | ChainLogo | `ChainLogo.tsx` | Yes, through TokenPair |
 | BoostedApr | `BoostedApr.tsx` | No |

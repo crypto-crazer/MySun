@@ -82,29 +82,43 @@ export function holdingUsd(balance: bigint | undefined, supply: bigint | undefin
 }
 
 /**
- * The name a token goes by in names and labels: wrapped ETH reads as ETH. Amount fields, approvals
- * and transactions keep the on-chain symbol, since the vault takes WETH, not native ETH.
+ * The names tokens go by in names and labels, keyed by ON-CHAIN symbol: wrapped ETH reads as ETH. The one
+ * place this mapping lives — a second wrapped token (WBTC → BTC) is one entry here, no call site changes.
+ * Amount fields, approvals, transactions and search keep the on-chain symbol: the vault takes WETH, not ETH.
  */
+const DISPLAY_SYMBOLS: Readonly<Record<string, string>> = { WETH: 'ETH' };
+
+/** The name a token goes by in names and labels (`DISPLAY_SYMBOLS`); any other symbol as on chain. */
 export function displaySymbol(symbol: string): string {
-  return symbol === 'WETH' ? 'ETH' : symbol;
+  return DISPLAY_SYMBOLS[symbol] ?? symbol;
 }
 
 /**
- * The ON-CHAIN symbols in the order a basket reads: the anchor (USDG) last, like a pool pair, the
- * rest as on chain. Names and icon rows both take it, so the marks line up with the words.
+ * The chain indices of a basket in the order it reads: the anchor (USDG) last, like a pool pair, the rest
+ * as on chain. Index-based, so a symbol listed twice still yields every token exactly once.
  */
+export function basketOrderIndices(tokens: readonly { symbol: string }[]): number[] {
+  const all = tokens.map((_, i) => i);
+  const isAnchor = (i: number) => tokens[i].symbol === USD_ANCHOR_SYMBOL;
+  return [...all.filter((i) => !isAnchor(i)), ...all.filter(isAnchor)];
+}
+
+/** The ON-CHAIN symbols in `basketOrderIndices` order. Names and icon rows both take it, so the marks line up with the words. */
 export function basketOrder(symbols: readonly string[]): string[] {
-  const others = symbols.filter((s) => s !== USD_ANCHOR_SYMBOL);
-  return others.length === symbols.length ? [...symbols] : [...others, USD_ANCHOR_SYMBOL];
+  return basketOrderIndices(symbols.map((symbol) => ({ symbol }))).map((i) => symbols[i]);
 }
 
 /**
- * The basket as a display name, from the ON-CHAIN symbols in `basketOrder` ("ETH / USDG"); the
- * registry label without its parenthetical until the symbols land.
+ * The basket as a display name, from the ON-CHAIN symbols in `basketOrder` ("ETH / USDG"). Until the symbols
+ * land, the registry label read the same way: "USDG / WETH basket (…)" → "ETH / USDG", so the name does not
+ * change when the reads arrive; a label that is not a symbol list loses its parenthetical only.
  */
 export function basketName(symbols: readonly string[], fallbackLabel: string): string {
-  if (symbols.length === 0) return fallbackLabel.replace(/\s*\([^)]*\)\s*$/, '').replace(/\bWETH\b/g, 'ETH');
-  return basketOrder(symbols).map(displaySymbol).join(' / ');
+  if (symbols.length > 0) return basketOrder(symbols).map(displaySymbol).join(' / ');
+  const label = fallbackLabel.replace(/\s*\([^)]*\)\s*$/, '');
+  const listed = label.replace(/\s+basket$/i, '').split('/').map((s) => s.trim());
+  if (listed.length > 1 && listed.every((s) => /^[A-Za-z0-9.]+$/.test(s))) return basketName(listed, label);
+  return label.replace(/[A-Za-z0-9.]+/g, displaySymbol);
 }
 
 /** `performanceFeeBps` → "10%", or "12.50%" when there are hundredths; "—" until read. */

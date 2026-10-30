@@ -5,11 +5,14 @@
  * Two lists, two meanings:
  *  - `CHAINS` / `SUPPORTED_CHAINS` — every chain the app knows and will offer to switch to;
  *  - `DEPLOYMENTS` — the subset MySun is actually deployed on, each with its `vaults` list
- *    (`vaultsForChain` / `defaultVault` / `findVault`; which one the app shows: ./vaultSelection.ts).
+ *    (`vaultsForChain` / `defaultVault` / `findVault`; each vault page reads the vault in its URL).
  *
- * Both registry chains ship in every build — mainnet and the demo chain (the `local` overlay from
- * shared/deployment.local.json, reached through `resolveLocalRpcUrl`) — and the switcher offers both.
- * Live is the default: `defaultChainIds` prefers the first non-local deployment.
+ * The demo chain (the `local` overlay from shared/deployment.local.json, reached through
+ * `resolveLocalRpcUrl`) ships in local/dev builds only — `vite dev`, vitest, `e2e:local` — where the
+ * switcher offers it next to mainnet. A production build (`vite build`: the public demo is live-only)
+ * drops it from every list here, so no surface can select, route to or fund it: one gate,
+ * `demoChainEnabled` / `DEMO_CHAIN_ENABLED`. Live is the default either way: `defaultChainIds`
+ * prefers the first non-local deployment.
  *
  * Imports are relative (not `@/`) on purpose: `scripts/e2e-local.ts` runs this module under tsx,
  * which does not see the Vite alias.
@@ -26,11 +29,26 @@ import {
 
 export type { ChainDeployment, ChainEntry, ChainMeta, VaultEntry };
 
-/** Every registry chain, ascending chain id — mainnet and the demo chain alike. */
-export const CHAINS: readonly ChainEntry[] = REGISTRY_CHAINS;
+/**
+ * THE build gate for the demo chain: true for a local/dev build, false for a production one. Read
+ * from `import.meta.env.DEV` (`vite dev` and vitest → true; `vite build` → false). No env at all —
+ * `scripts/e2e-local.ts` imports this module under tsx, where `import.meta.env` is undefined — is
+ * local, never a crash. The parameter exists for the regression tests.
+ */
+export function demoChainEnabled(env: { readonly DEV?: boolean } | undefined = import.meta.env): boolean {
+  return env?.DEV !== false;
+}
 
-/** The deployed chains, with their vaults. */
-export const DEPLOYMENTS: readonly ChainDeployment[] = REGISTRY_DEPLOYMENTS;
+/** The gate, evaluated once for this build. Every demo-chain surface keys off it (directly or via the lists below). */
+export const DEMO_CHAIN_ENABLED: boolean = demoChainEnabled();
+
+/** Every chain this build offers, ascending chain id — mainnet, plus the demo chain in a local/dev build. */
+export const CHAINS: readonly ChainEntry[] = DEMO_CHAIN_ENABLED ? REGISTRY_CHAINS : REGISTRY_CHAINS.filter((c) => !c.local);
+
+/** The deployed chains this build offers, with their vaults (the demo chain: local/dev builds only). */
+export const DEPLOYMENTS: readonly ChainDeployment[] = DEMO_CHAIN_ENABLED
+  ? REGISTRY_DEPLOYMENTS
+  : REGISTRY_DEPLOYMENTS.filter((d) => !d.local);
 
 /** A deployed chain's vaults (registry order); empty for planned / unknown chains. */
 export function vaultsForChain(chainId: number | undefined): readonly VaultEntry[] {
@@ -59,7 +77,7 @@ const LOCAL_RPC_HOSTS = /^(localhost|127(?:\.\d{1,3}){3}|10(?:\.\d{1,3}){3}|192\
  * So:
  *  - page served from a loopback/private host: the stored host is swapped for the page's own
  *    hostname (`localhost` is pinned to `127.0.0.1` to stay on IPv4);
- *  - page served from a public host (the demo's ngrok tunnel): reads go to the page's own
+ *  - page served from any other host: reads go to the page's own
  *    same-origin `/rpc`, which the dev server proxies to the stack's node (vite.config.ts) — the
  *    stored `127.0.0.1` would point at the visitor's machine.
  * Hosted chains, node-side callers (e2e, sync — no `window`), and pages without an origin fall
@@ -102,7 +120,7 @@ export function toViemChain(meta: ChainMeta & { local?: true }): Chain {
   });
 }
 
-/** Every registry chain as a viem chain, ascending chain id. */
+/** Every chain this build offers (`CHAINS`) as a viem chain, ascending chain id. */
 export const SUPPORTED_CHAINS: readonly Chain[] = CHAINS.map(toViemChain);
 
 /** The viem chain for an id, or undefined when the wallet is on something the registry lacks. */
@@ -126,15 +144,16 @@ export function hasDeployment(chainId: number | undefined): boolean {
 
 /**
  * Local-only conveniences (the dev panel, the RPC strip) are gated on this: true only for the demo
- * stack overlaid from shared/deployment.local.json. Minting is gated further — see canMintMocks.
+ * stack overlaid from shared/deployment.local.json, and only in a build that ships it
+ * (`DEMO_CHAIN_ENABLED`). Minting is gated further — see canMintMocks.
  */
 export function isLocalChain(chainId: number | undefined): boolean {
-  return deploymentForChain(chainId)?.local === true;
+  return DEMO_CHAIN_ENABLED && deploymentForChain(chainId)?.local === true;
 }
 
 /** The local stack runs on an Anvil fork of a real chain (deployment.local.json `fork: true`). */
 export function isForkDeployment(d: ChainDeployment | undefined): boolean {
-  return d?.local === true && d.fork === true;
+  return DEMO_CHAIN_ENABLED && d?.local === true && d.fork === true;
 }
 
 /**
@@ -142,7 +161,7 @@ export function isForkDeployment(d: ChainDeployment | undefined): boolean {
  * (the RHC fork — the flagship basket is REAL tokens, funded into the dev wallets at deploy time).
  */
 export function canMintMocks(d: ChainDeployment | undefined): boolean {
-  return d?.local === true && d.mintable !== false;
+  return DEMO_CHAIN_ENABLED && d?.local === true && d.mintable !== false;
 }
 
 export function chainLabel(chainId: number | undefined): string {

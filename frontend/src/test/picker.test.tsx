@@ -115,9 +115,10 @@ describe('wallet picker', () => {
     expect(screen.getByText('Rabby Wallet')).toBeDefined();
   });
 
-  it('always keeps read-only mode reachable', async () => {
+  it('offers no read-only mode: every figure reads without a wallet, so the picker is only for connecting', async () => {
     await openPicker();
-    expect(screen.getByRole('button', { name: 'Read-only mode' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: /Read-only/i })).toBeNull();
+    expect(screen.queryByText(/read-only|prototype|demo data/i)).toBeNull();
   });
 
   it('explains how to enable WalletConnect when no project id is configured', async () => {

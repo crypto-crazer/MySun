@@ -144,10 +144,29 @@ describe('NavChart — real series vs illustrative', () => {
   it('3 snapshots → still the illustrative line, badged', async () => {
     stubFetch(body(3));
     renderChart(URL_ + '?3');
-    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 0));
-    expect(screen.getByText('Illustrative')).toBeDefined();
+    expect(await screen.findByText('Illustrative')).toBeDefined();
     expect(screen.queryByTestId('nav-history-until')).toBeNull();
+  });
+
+  it('while the history loads → the empty frame: no line, no Illustrative badge, the live readout stays', async () => {
+    let release: (r: Response) => void = () => {};
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((r) => { release = r; })));
+    renderChart(URL_ + '?pending');
+    expect(screen.getByTestId('nav-loading')).toBeDefined();
+    expect(screen.queryByText('Illustrative')).toBeNull();
+    expect(screen.queryByTestId('nav-history-until')).toBeNull();
+    expect(screen.getByTestId('nav-live').textContent).toContain('$1.20');
+    // Once it lands the real line replaces the frame.
+    release(new Response(body(8)));
+    expect(await screen.findByTestId('nav-history-until')).toBeDefined();
+    expect(screen.queryByTestId('nav-loading')).toBeNull();
+  });
+
+  it('a failed fetch → the illustrative line, badged (the fallback stays for real failures)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 503 })));
+    renderChart(URL_ + '?503');
+    expect(await screen.findByText('Illustrative')).toBeDefined();
+    expect(screen.queryByTestId('nav-loading')).toBeNull();
   });
 
   it('≥ 6 snapshots → the real line, no badge, a data-until stamp; the live readout is unchanged', async () => {

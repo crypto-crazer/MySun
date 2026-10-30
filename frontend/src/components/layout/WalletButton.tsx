@@ -11,9 +11,7 @@ import { describeSwitchError } from '@/chain/switchChain';
 import { useSwitchToChain, useTargetChain } from '@/chain/useTargetChain';
 
 export function WalletButton() {
-  const connected = useStore((s) => s.connected);
   const storeAddress = useStore((s) => s.address);
-  const readOnlyMode = useStore((s) => s.readOnlyMode);
   const { address, chainId, walletName } = useWallet();
   const { chain: target, isWrongChain: wrongChain } = useTargetChain();
   const { switchTo, switching, error } = useSwitchToChain();
@@ -24,7 +22,7 @@ export function WalletButton() {
 
   useDismiss(ref, open, setOpen);
 
-  if (!connected) {
+  if (!storeAddress) {
     return (
       <Button size="sm" className="sm:!px-4" onClick={connectWallet} loading={isPending}>
         {isPending ? 'Connecting' : 'Connect wallet'}
@@ -32,14 +30,11 @@ export function WalletButton() {
     );
   }
 
-  // Read-only mode has no account: say so rather than show an invented address.
-  const shown = storeAddress ?? 'Read-only';
-
   return (
     <div className="relative" ref={ref}>
       <Button variant="secondary" size="sm" onClick={() => setOpen(!open)} className={cx('sm:!px-4', wrongChain && 'btn-glass-warning')}>
         <span className="flex items-center gap-2 font-mono text-xs font-normal">
-          {/* The wallet mark takes the label's colour on a real connection, grey in read-only mode. */}
+          {/* The wallet mark takes the label's colour while the wallet reports the account, grey while it is mid-switch. */}
           <svg
             viewBox="0 0 16 16"
             className={cx('h-4 w-4 shrink-0', !address && 'text-weaker')}
@@ -51,13 +46,13 @@ export function WalletButton() {
             <path d="M1.75 5.75h12.5v7.5H1.75zM1.75 5.75v-3h10v3" />
             <path d="M10 8.5h2v2h-2z" fill="currentColor" stroke="none" />
           </svg>
-          {storeAddress ? shortAddress(storeAddress) : shown}
+          {shortAddress(storeAddress)}
           {wrongChain && <span className="text-warning">!</span>}
         </span>
       </Button>
       {open && (
         <div className={cx(POPOVER_PANEL, 'w-72 p-3')}>
-          <div className="text-2xs text-weaker mb-2 num break-all">{shown}</div>
+          <div className="text-2xs text-weaker mb-2 num break-all">{storeAddress}</div>
 
           {address ? (
             <div className="mb-3 rounded border border-stroke-strong bg-background-elevated px-3 py-2">
@@ -90,15 +85,11 @@ export function WalletButton() {
                 </div>
               )}
             </div>
-          ) : (
-            <div className="mb-3 rounded border border-stroke-warning/40 bg-fill-warning/10 px-3 py-2 text-2xs text-warning leading-snug">
-              Read-only mode — no chain connection. Connect a browser wallet to deposit or withdraw.
-            </div>
-          )}
+          ) : null}
 
           <div className="mt-3 pt-2 border-t border-stroke-strong">
             <Button variant="secondary" size="sm" block onClick={() => { disconnectAll(); setOpen(false); }}>
-              {readOnlyMode && !address ? 'Leave read-only mode' : 'Disconnect'}
+              Disconnect
             </Button>
           </div>
         </div>

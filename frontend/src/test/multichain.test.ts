@@ -24,7 +24,6 @@ import {
 } from '@/chain/chains';
 import { addEthereumChainParams, describeSwitchError, isUnknownChain, manualNetworkParams, switchWalletChain } from '@/chain/switchChain';
 import { resolveTargetChain } from '@/chain/targetChain';
-import { setWalletRpcOverride, walletRpcFor } from '@/chain/walletRpcOverride';
 import { buildRegistry, findDuplicateKey } from '../../scripts/registry';
 
 const shared = (name: string) => readFileSync(fileURLToPath(new URL(`../../../shared/${name}`, import.meta.url)), 'utf8');
@@ -319,23 +318,11 @@ describe('switchWalletChain — switch, or add then switch', () => {
     expect(isUnknownChain(undefined)).toBe(false);
   });
 
-  it('hands the wallet the https tunnel RPC when the override covers the chain', async () => {
-    setWalletRpcOverride({ chainId: 46630, rpcUrl: 'https://demo.example.test' });
-    try {
-      const w = fakeWallet([4663]);
-      await expect(switchWalletChain(w.client, local)).resolves.toBe('added');
-      const add = w.calls.find((c) => c.method === 'wallet_addEthereumChain');
-      expect(add?.params).toEqual([{ ...addEthereumChainParams(local), rpcUrls: ['https://demo.example.test'] }]);
-      expect(manualNetworkParams(local).rpcUrl).toBe('https://demo.example.test');
-      expect(walletRpcFor(46630)).toBe('https://demo.example.test');
-      expect(walletRpcFor(4663)).toBeNull();
-    } finally {
-      setWalletRpcOverride(null);
-    }
-  });
-
-  it('without an override every wallet-facing URL is the hostname-derived one', () => {
-    expect(walletRpcFor(46630)).toBeNull();
+  it('every wallet-facing URL is the chain\'s own (hostname-derived) one', async () => {
+    const w = fakeWallet([4663]);
+    await expect(switchWalletChain(w.client, local)).resolves.toBe('added');
+    const add = w.calls.find((c) => c.method === 'wallet_addEthereumChain');
+    expect((add?.params as [{ rpcUrls: string[] }])[0].rpcUrls).toEqual([...local.rpcUrls.default.http]);
     expect(addEthereumChainParams(local).rpcUrls).toEqual([...local.rpcUrls.default.http]);
     expect(manualNetworkParams(local).rpcUrl).toBe(local.rpcUrls.default.http[0]);
   });
@@ -344,27 +331,27 @@ describe('switchWalletChain — switch, or add then switch', () => {
 describe('resolveTargetChain — wallet chain if deployed, else the selected chain', () => {
   const at = (walletChainId: number | undefined, selectedChainId: number | undefined) => {
     const t = resolveTargetChain({ walletChainId, selectedChainId });
-    return { id: t.chain.id, hasDeployment: t.hasDeployment, isWrongChain: t.isWrongChain, vault: t.vault?.vault };
+    return { id: t.chain.id, hasDeployment: t.hasDeployment, isWrongChain: t.isWrongChain, firstVault: t.deployment?.vaults[0]?.vault };
   };
 
   it('no wallet: the selected chain, read-only', () => {
-    expect(at(undefined, DEFAULT_CHAIN_ID)).toEqual({ id: 4663, hasDeployment: true, isWrongChain: false, vault: MAIN_VAULT });
-    expect(at(undefined, 46630)).toEqual({ id: 46630, hasDeployment: true, isWrongChain: false, vault: LOCAL_VAULT });
-    expect(at(undefined, 4663)).toEqual({ id: 4663, hasDeployment: true, isWrongChain: false, vault: MAIN_VAULT });
+    expect(at(undefined, DEFAULT_CHAIN_ID)).toEqual({ id: 4663, hasDeployment: true, isWrongChain: false, firstVault: MAIN_VAULT });
+    expect(at(undefined, 46630)).toEqual({ id: 46630, hasDeployment: true, isWrongChain: false, firstVault: LOCAL_VAULT });
+    expect(at(undefined, 4663)).toEqual({ id: 4663, hasDeployment: true, isWrongChain: false, firstVault: MAIN_VAULT });
   });
 
   it('wallet on a deployed chain: that chain wins over the selection', () => {
-    expect(at(46630, 4663)).toEqual({ id: 46630, hasDeployment: true, isWrongChain: false, vault: LOCAL_VAULT });
-    expect(at(4663, 46630)).toEqual({ id: 4663, hasDeployment: true, isWrongChain: false, vault: MAIN_VAULT });
+    expect(at(46630, 4663)).toEqual({ id: 46630, hasDeployment: true, isWrongChain: false, firstVault: LOCAL_VAULT });
+    expect(at(4663, 46630)).toEqual({ id: 4663, hasDeployment: true, isWrongChain: false, firstVault: MAIN_VAULT });
   });
 
   it('wallet on a chain with no deployment: the selected chain, flagged wrong', () => {
-    expect(at(1, 46630)).toEqual({ id: 46630, hasDeployment: true, isWrongChain: true, vault: LOCAL_VAULT });
-    expect(at(1, 4663)).toEqual({ id: 4663, hasDeployment: true, isWrongChain: true, vault: MAIN_VAULT });
+    expect(at(1, 46630)).toEqual({ id: 46630, hasDeployment: true, isWrongChain: true, firstVault: LOCAL_VAULT });
+    expect(at(1, 4663)).toEqual({ id: 4663, hasDeployment: true, isWrongChain: true, firstVault: MAIN_VAULT });
   });
 
   it('wallet and selection both on the mainnet chain: that deployment (the registry has no planned chains)', () => {
-    expect(at(4663, 4663)).toEqual({ id: 4663, hasDeployment: true, isWrongChain: false, vault: MAIN_VAULT });
+    expect(at(4663, 4663)).toEqual({ id: 4663, hasDeployment: true, isWrongChain: false, firstVault: MAIN_VAULT });
   });
 
   it('a selection outside the registry falls back to the default chain', () => {

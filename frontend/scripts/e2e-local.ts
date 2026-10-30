@@ -4,7 +4,7 @@
  *
  * The local stack runs several vaults (registry v2, shared/deployment.local.json → `vaults`):
  *
- *   1–6  the DEFAULT vault — resolved with the app's own rule (src/chain/vaultSelection.ts):
+ *   1–6  the DEFAULT vault — the chain's first registry vault (`defaultVault`, src/chain/chains.ts):
  *        read vault → mint → approve → previewDeposit → deposit → previewRedeem → redeem half
  *        On the RHC fork stack (deployment.local.json `mintable: false`) the default vault's tokens
  *        are REAL (USDG / WETH) and its adapters are the real Uniswap v3 / v4 ones: nothing can be
@@ -48,7 +48,9 @@ import { vaultAbi, mockTokenAbi, positionAdapterAbi, zapInAbi, zapOutAbi } from 
 import { dexLabel, poolIdLabel, toExactString } from '../src/chain/amounts';
 import {
   ZAP_DEFAULT_SLIPPAGE_BPS,
+  ZAP_LEG_SLIPPAGE_BPS,
   ZAP_ROUTE_SYMBOL,
+  isZapRouteSymbol,
   parseZapDepositAmount,
   parseZapRedeemShares,
   zapInCallAbi,
@@ -57,8 +59,7 @@ import {
   zapSizeWarning,
 } from '../src/chain/zap';
 import { faucetAmount, faucetKind, fundEth, impersonatedFund } from '../src/chain/faucet';
-import { canMintMocks, chainFor, deploymentForChain, findVault, isForkDeployment, type ChainDeployment, type VaultEntry } from '../src/chain/chains';
-import { resolveVault } from '../src/chain/vaultSelection';
+import { canMintMocks, chainFor, defaultVault, deploymentForChain, findVault, isForkDeployment, type ChainDeployment, type VaultEntry } from '../src/chain/chains';
 
 /** The local demo stack's chain id (Anvil runs with the RHC testnet id). */
 const LOCAL_CHAIN_ID = 46630;
@@ -75,9 +76,9 @@ const LOCAL_DEPLOYMENT = localDeployment();
 const ANVIL_ACCOUNT_2_KEY = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a' as Hex;
 const EXPECTED_ADDRESS = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
 
-/** The vault the app shows first on the local chain: no stored choice → the first listed. */
+/** The local chain's first registry vault. */
 const DEFAULT_VAULT: VaultEntry = (() => {
-  const v = resolveVault(LOCAL_CHAIN_ID, {});
+  const v = defaultVault(LOCAL_CHAIN_ID);
   if (!v) throw new Error(`no vaults for chain ${LOCAL_CHAIN_ID}`);
   return v;
 })();
@@ -110,7 +111,23 @@ const chain = chainFor(LOCAL_CHAIN_ID)!;
 
 const account = privateKeyToAccount(ANVIL_ACCOUNT_2_KEY);
 const publicClient = createPublicClient({ chain, transport: http(RPC) });
-const walletClient = createWalletClient({ account, chain, transport: http(RPC) });
+
+/*
+ * Anvil's fee portrait on the frozen demo stack is degenerate: its base fee decays as the chain mines
+ * (7 wei at the time of writing) while `eth_maxPriorityFeePerGas` still answers 1 gwei, so viem's own
+ * estimate hands EIP-1559 a tip ABOVE its fee cap and refuses to sign — "The provided tip
+ * (maxPriorityFeePerGas = 1 gwei) cannot be higher than the fee cap (maxFeePerGas = 0.000000008 gwei)".
+ * A real wallet picks its own fees, so only this harness is exposed. Pin one consistent pair (cap ≥ tip,
+ * both orders of magnitude above what this chain asks) for every write it makes.
+ */
+const LOCAL_FEES = { maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n } as const;
+
+const walletClient = createWalletClient({ account, chain, transport: http(RPC) }).extend((client) => {
+  type WriteArgs = Parameters<typeof client.writeContract>[0];
+  return {
+    writeContract: ((args: WriteArgs) => client.writeContract({ ...args, ...LOCAL_FEES } as WriteArgs)) as typeof client.writeContract,
+  };
+});
 
 /* ------------------------------------- tiny test harness ------------------------------------- */
 
@@ -126,6 +143,7 @@ function assert(condition: boolean, label: string, detail?: string): void {
 
 /** Adaptive precision, same rule as the UI: small receipt-token slices stay readable. */
 function fmt(value: bigint, decimals: number, sig = 6): string {
+  if (value < 0n) return `-${fmt(-value, decimals, sig)}`;
   const base = 10n ** BigInt(decimals);
   const int = (value / base).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   let digits = sig;
@@ -208,6 +226,8 @@ async function main(): Promise<void> {
   }
   console.log(`  ${symbol} supply ${fmt(supplyBefore, decimals)} (${supplyBefore} base units)`);
 
+  // Each adapter's token pair (lower-cased), for step 5's swap reconciliation: a `Swapped` log names only tokenIn.
+  const adapterPairs = new Map<string, readonly string[]>();
   for (const a of adapters) {
     const [dex, poolId, position] = await Promise.all([
       publicClient.readContract({ address: a, abi: positionAdapterAbi, functionName: 'dex' }) as Promise<Hex>,
@@ -216,6 +236,7 @@ async function main(): Promise<void> {
         readonly [readonly Address[], readonly bigint[]]
       >,
     ]);
+    adapterPairs.set(a.toLowerCase(), position[0].map((t) => t.toLowerCase()));
     console.log(
       // position() is in the ADAPTER's token order (pool order on the real adapters), not the vault's.
       `  adapter ${a} · ${dexLabel(dex)} · ${poolIdLabel(poolId)} · position ${position[1]
@@ -313,6 +334,7 @@ async function main(): Promise<void> {
   assert(minShares > 0n, 'minShares is non-zero (the contract rejects 0)', fmt(minShares, decimals));
 
   const walletBefore = await Promise.all(meta.map((t) => balanceOf(t.address, account.address)));
+  const idleBefore = await Promise.all(meta.map((t) => balanceOf(t.address, VAULT)));
   const sharesBefore = (await publicClient.readContract({ ...vault, functionName: 'balanceOf', args: [account.address] })) as bigint;
 
   const { result: simulatedShares, request } = await publicClient.simulateContract({
@@ -349,10 +371,76 @@ async function main(): Promise<void> {
     readonly Address[],
     readonly bigint[],
   ];
+  const idleAfterDeposit = await Promise.all(meta.map((t) => balanceOf(t.address, VAULT)));
+
+  // Where the pull went (exact, both stacks): `deposit` hands it to the registered adapters in the same tx
+  // (DepositSplit → one vault `Deployed` per adapter) and only the splitter's floor dust stays vault idle.
+  const at = (list: readonly Address[], token: Address) => list.findIndex((a) => a.toLowerCase() === token.toLowerCase());
+  const deployedLogs = parseEventLogs({ abi: vaultAbi, logs: depositReceipt.logs, eventName: 'Deployed' }).filter(
+    (l) => l.address.toLowerCase() === VAULT.toLowerCase(),
+  );
+  const handedOver = meta.map((t) =>
+    deployedLogs.reduce((sum, l) => {
+      const args = l.args as { tokens: readonly Address[]; amounts: readonly bigint[] };
+      const j = at(args.tokens, t.address);
+      return j < 0 ? sum : sum + args.amounts[j];
+    }, 0n),
+  );
+  assert(
+    deployedLogs.every((l) => adapterPairs.has((l.args as { adapter: Address }).adapter.toLowerCase())),
+    'the deposit deployed only into registered adapters',
+    `${deployedLogs.length} Deployed`,
+  );
   for (const [i, t] of meta.entries()) {
     assert(
-      totalsAfterDeposit[1][i] - totalsBefore[1][i] === required[i],
-      `vault total ${t.symbol} grew by the pulled amount`,
+      handedOver[i] + (idleAfterDeposit[i] - idleBefore[i]) === required[i],
+      `${t.symbol} pull fully accounted: Σ Deployed + vault idle Δ == required`,
+      `${fmt(handedOver[i], t.decimals)} deployed + ${idleAfterDeposit[i] - idleBefore[i]} base units idle`,
+    );
+  }
+
+  // What the vault total does NOT promise: Δ totalTokens == required per token. totalTokens() is derived
+  // (vault idle + Σ adapter position(), priced at each pool's live spot), and a real adapter's `deploy`
+  // ratio-swaps the surplus toward its range ratio at the TWAP before adding liquidity (UniswapV4*Adapter /
+  // UniswapV3Adapter `_swapToRangeRatio`). So per token the total moves by required − sold + bought, plus a
+  // small value-neutral re-composition of the vault's own concentrated liquidity at the spot those swaps
+  // moved. The swaps are read from this receipt's adapter `Swapped` logs; the re-composition is bounded at
+  // 1 bp of the post-deposit total (measured ≈ 10 ppm on the frozen fork stack — frontend/REPORT-E2E-TOTALS.md).
+  // Mock adapters never swap, so the all-mock stack keeps exact equality.
+  const swappedLogs = parseEventLogs({
+    abi: parseAbi([
+      'event Swapped(address indexed tokenIn, uint256 amountIn, uint256 amountOut, uint256 minAmountOut)',
+      'event Swapped(address indexed tokenIn, uint256 amountIn, uint256 amountOut, uint256 minAmountOut, uint8 venue)',
+    ]),
+    logs: depositReceipt.logs,
+  }).filter((l) => adapterPairs.has(l.address.toLowerCase()));
+  const swapNet = meta.map(() => 0n);
+  for (const l of swappedLogs) {
+    const pair = adapterPairs.get(l.address.toLowerCase())!;
+    const tokenIn = l.args.tokenIn.toLowerCase();
+    const tokenOut = pair.find((t) => t !== tokenIn);
+    const iIn = at(tokens, tokenIn as Address);
+    const iOut = tokenOut === undefined ? -1 : at(tokens, tokenOut as Address);
+    if (iIn >= 0) swapNet[iIn] -= l.args.amountIn;
+    if (iOut >= 0) swapNet[iOut] += l.args.amountOut;
+  }
+  if (FORK) {
+    console.log(
+      `  deploy-time ratio swaps: ${swappedLogs.length} · net ${swapNet.map((v, i) => `${fmt(v, meta[i].decimals)} ${meta[i].symbol}`).join(', ')}`,
+    );
+  } else {
+    assert(swappedLogs.length === 0, 'mock adapters deploy without a swap');
+  }
+  const absBig = (v: bigint) => (v < 0n ? -v : v);
+  for (const [i, t] of meta.entries()) {
+    const grew = totalsAfterDeposit[1][i] - totalsBefore[1][i];
+    const gap = grew - (required[i] + swapNet[i]);
+    if (FORK) console.log(`  ${t.symbol}: total Δ ${fmt(grew, t.decimals)} · Δ − (required + swaps) = ${gap} base units`);
+    assert(
+      FORK ? absBig(gap) <= totalsAfterDeposit[1][i] / 10_000n : gap === 0n,
+      FORK
+        ? `vault total ${t.symbol} grew by the pulled amount net of the deploy swaps (re-composition ≤ 1 bp)`
+        : `vault total ${t.symbol} grew by exactly the pulled amount`,
       fmt(totalsAfterDeposit[1][i], t.decimals),
     );
   }
@@ -679,7 +767,7 @@ async function zapRoundTrip(): Promise<void> {
       decimals: Number(await publicClient.readContract({ address, abi: erc20Abi, functionName: 'decimals' })),
     })),
   );
-  const ui = meta.findIndex((t) => t.symbol === ZAP_ROUTE_SYMBOL);
+  const ui = meta.findIndex((t) => isZapRouteSymbol(t.symbol));
   const usdg = meta[ui];
   const others = meta.filter((_, i) => i !== ui);
   const decimals = Number(await publicClient.readContract({ ...vault, functionName: 'decimals' }));
@@ -704,16 +792,17 @@ async function zapRoundTrip(): Promise<void> {
     assert(route[0] !== '0x0000000000000000000000000000000000000000', `zap-in route ${usdg.symbol} → ${o.symbol} is set`, `pool ${route[0]} · fee ${route[1]} · cap ${route[3]} bps`);
     assert(bps <= route[3], `the UI default tolerance (${bps} bps) is within the route cap`, `${route[3]} bps`);
   }
+  const legIn = ZAP_LEG_SLIPPAGE_BPS; // the UI's per-leg bound: 0 = each route's own cap
 
   const amountIn = 1_000n * 10n ** BigInt(usdg.decimals);
   assert(parseZapDepositAmount('1000', usdg.decimals)?.ok === true && zapSizeWarning(amountIn, usdg.decimals) === null, 'the UI accepts 1,000 USDG with no size warning');
   const [, offers, expectedShares, expectedRefunds] = await publicClient.readContract({
     ...zapIn,
     functionName: 'previewZap',
-    args: [VAULT, usdg.address, amountIn, bps],
+    args: [VAULT, usdg.address, amountIn, legIn],
   });
   const minShares = zapMinimum(expectedShares, bps);
-  console.log(`  zapping ${fmt(amountIn, usdg.decimals)} ${usdg.symbol} at ${bps} bps`);
+  console.log(`  zapping ${fmt(amountIn, usdg.decimals)} ${usdg.symbol} at ${bps} bps (legs ${legIn} bps)`);
   console.log(`  previewZap: offer ${offers.map((v, i) => `${fmt(v, meta[i].decimals)} ${meta[i].symbol}`).join(' + ')} → ${fmt(expectedShares, decimals)} ${symbol} · refunds ${expectedRefunds.map((v, i) => `${v} ${meta[i].symbol}`).join(', ')} (base units)`);
   console.log(`  minShares (UI math, ${bps} bps): ${fmt(minShares, decimals)} ${symbol}`);
   assert(expectedShares > 0n && minShares > 0n && minShares < expectedShares, 'previewZap quotes shares and minShares is a non-zero haircut of it');
@@ -726,7 +815,7 @@ async function zapRoundTrip(): Promise<void> {
   const sharesBefore = await publicClient.readContract({ ...vault, functionName: 'balanceOf', args: [me] });
   const supplyBefore = await publicClient.readContract({ ...vault, functionName: 'totalSupply' });
   const zapReceipt = await send(
-    await walletClient.writeContract({ ...zapIn, functionName: 'zapDeposit', args: [VAULT, usdg.address, amountIn, minShares, bps, me] }),
+    await walletClient.writeContract({ ...zapIn, functionName: 'zapDeposit', args: [VAULT, usdg.address, amountIn, minShares, legIn, me] }),
     'zapDeposit',
   );
   const zapped = parseEventLogs({ abi: zapInAbi, logs: zapReceipt.logs, eventName: 'ZapDeposited' })[0];
@@ -778,15 +867,16 @@ async function zapRoundTrip(): Promise<void> {
     publicClient.readContract({ ...zapOut, functionName: 'UNIVERSAL_ROUTER' }),
   ]);
 
+  const legOut = ZAP_LEG_SLIPPAGE_BPS;
   const shares = minted; // exit exactly what the zap just minted
   assert(parseZapRedeemShares(toExactString(shares, decimals), decimals, sharesAfter)?.ok === true, 'the UI accepts the minted shares as a redeem amount');
   const [, sold, expectedOut, passThrough] = await publicClient.readContract({
     ...zapOut,
     functionName: 'previewRedeem',
-    args: [VAULT, usdg.address, shares, bps],
+    args: [VAULT, usdg.address, shares, legOut],
   });
   const minOut = zapMinimum(expectedOut, bps);
-  console.log(`  redeeming ${fmt(shares, decimals)} ${symbol} at ${bps} bps`);
+  console.log(`  redeeming ${fmt(shares, decimals)} ${symbol} at ${bps} bps (legs ${legOut} bps)`);
   console.log(`  previewRedeem: sells ${sold.map((v, i) => `${fmt(v, meta[i].decimals)} ${meta[i].symbol}`).join(' + ')} → ${fmt(expectedOut, usdg.decimals)} ${usdg.symbol} · pass-through ${passThrough.map((v, i) => `${v} ${meta[i].symbol}`).join(', ')}`);
   console.log(`  minAmountOut (UI math, ${bps} bps): ${fmt(minOut, usdg.decimals)} ${usdg.symbol}`);
   assert(expectedOut > 0n && minOut > 0n && minOut < expectedOut, 'previewRedeem quotes USDG and the minimum is a non-zero haircut of it');
@@ -799,7 +889,7 @@ async function zapRoundTrip(): Promise<void> {
   const exitWalletBefore = await Promise.all(meta.map((t) => bal(t.address, me)));
   const exitSupplyBefore = await publicClient.readContract({ ...vault, functionName: 'totalSupply' });
   const exitReceipt = await send(
-    await walletClient.writeContract({ ...zapOut, functionName: 'zapRedeem', args: [VAULT, usdg.address, shares, minOut, bps, me] }),
+    await walletClient.writeContract({ ...zapOut, functionName: 'zapRedeem', args: [VAULT, usdg.address, shares, minOut, legOut, me] }),
     'zapRedeem',
   );
   const redeemedEv = parseEventLogs({ abi: zapOutAbi, logs: exitReceipt.logs, eventName: 'ZapRedeemed' })[0];

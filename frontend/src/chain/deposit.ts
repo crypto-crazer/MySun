@@ -9,7 +9,7 @@
  *    share count is 0 and the deposit reverts.
  */
 import type { Address } from 'viem';
-import { parseAmount } from './amounts';
+import { parseAmount, toExactString } from './amounts';
 
 export const DEFAULT_SLIPPAGE_BPS = 50; // 0.50%
 export const MAX_SLIPPAGE_BPS = 5_000; // 50% — anything beyond is a typo, not a preference
@@ -118,4 +118,54 @@ export function insufficientBalance(
     if ((required[i] ?? 0n) > (balances[i] ?? 0n)) return tokens[i];
   }
   return null;
+}
+
+/** Decimals an auto-filled basket amount keeps (fewer when the token has fewer). */
+export const FILL_DECIMALS = 6;
+
+/** The contract's per-token virtual asset (`VIRTUAL_ASSETS`, 1 raw unit): deposit pricing divides by T_i + 1. */
+const VIRTUAL_ASSET = 1n;
+
+/**
+ * The basket fields after the user types `input` into field `from`: the others follow at the vault's
+ * current mix, rounded UP to FILL_DECIMALS so the typed token stays the one that sets the deposit.
+ * Clearing a field clears them all. A field the mix cannot size (totals not read yet, a token the vault
+ * does not hold, a typo) keeps what was there.
+ *
+ * The mix is the contract's own: `_bindingShares` takes min_i floor(amount_i × (S + 1) / (T_i + 1)), so a
+ * filled leg is never binding iff amount_i ≥ typed × (T_i + 1) / (T_from + 1). The plain ratio
+ * typed × T_i / T_from falls short of that whenever T_i < T_from (raw units) and it lands on a whole step —
+ * then the filled leg bound and less of the typed token was pulled than typed.
+ *
+ * With the wallet's `balances`, rounding never pushes a field past what the wallet holds: when that
+ * mix fits the balance but the rounded figure does not, the field takes the balance (still ≥ the mix,
+ * so the typed token still sets the deposit) — Max on the token held least never turns another red.
+ */
+export function fillAtMix(
+  tokens: readonly { address: Address; decimals: number }[],
+  totals: readonly bigint[],
+  current: Record<string, string>,
+  from: number,
+  input: string,
+  balances?: readonly bigint[],
+): Record<string, string> {
+  if (input.trim() === '') return {};
+  const next = { ...current, [tokens[from].address]: input };
+  const parsed = parseAmount(input, tokens[from].decimals);
+  const total = totals[from] ?? 0n;
+  if (!parsed.ok || total === 0n) return next;
+  const base = total + VIRTUAL_ASSET;
+  tokens.forEach((t, i) => {
+    const held = totals[i] ?? 0n;
+    if (i === from || held === 0n) return;
+    const mix = parsed.value * (held + VIRTUAL_ASSET);
+    const step = 10n ** BigInt(Math.max(t.decimals - FILL_DECIMALS, 0));
+    const den = base * step;
+    let amount = ((mix + den - 1n) / den) * step;
+    const balance = balances?.[i];
+    // mix ≤ balance < rounded: the rounding alone overshoots
+    if (balance !== undefined && amount > balance && mix <= balance * base) amount = balance;
+    next[t.address] = toExactString(amount, t.decimals);
+  });
+  return next;
 }

@@ -22,8 +22,8 @@
 
 export const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 export const VAULT_KEY_RE = /^[a-z][a-z0-9-]*$/;
-/** Every key a vault entry may carry; `demoUser` is the only optional one. */
-export const VAULT_KEYS = ['key', 'label', 'receipt', 'vault', 'implementation', 'keeper', 'planExecutor', 'demoUser'] as const;
+/** Every key a vault entry may carry; `planExecutor`, `demoUser` and `staging` are optional. */
+export const VAULT_KEYS = ['key', 'label', 'receipt', 'vault', 'implementation', 'keeper', 'planExecutor', 'demoUser', 'staging'] as const;
 const VAULT_ADDRESS_KEYS = ['vault', 'implementation', 'keeper'] as const;
 const RECEIPT_KEYS = ['name', 'symbol'] as const;
 
@@ -45,6 +45,11 @@ export interface RegistryVault {
   /** The vault's own PlanExecutor (keeper-composed plans); falls back to the chain's periphery. */
   planExecutor?: string;
   demoUser?: string;
+  /**
+   * Team-only vault: hidden in the app until team mode is unlocked (client-side soft gate). Only
+   * ever `true` — absent = public; `false` or a non-boolean is a registry error.
+   */
+  staging?: true;
 }
 
 /** Optional periphery contracts for a chain; at least one is present when the object is. */
@@ -100,6 +105,12 @@ function optionalBool(file: string, path: string, v: unknown): boolean | undefin
   return v;
 }
 
+/** `staging` is one-way: present means `true`; absent is the public default, so `false` is a mistake. */
+function stagingFlag(file: string, path: string, v: unknown): true {
+  if (v !== true) fail(file, path, `must be true when present — omit it for a public vault (got ${JSON.stringify(v)})`);
+  return true;
+}
+
 function address(file: string, path: string, v: unknown): string {
   if (v === undefined) fail(file, path, 'is missing');
   if (typeof v !== 'string' || !ADDRESS_RE.test(v)) fail(file, path, `is not an address (got ${JSON.stringify(v)})`);
@@ -141,6 +152,7 @@ function readVault(file: string, path: string, raw: unknown): RegistryVault {
   for (const k of VAULT_ADDRESS_KEYS) out[k] = address(file, `${path}.${k}`, raw[k]);
   if (raw.planExecutor !== undefined) out.planExecutor = address(file, `${path}.planExecutor`, raw.planExecutor);
   if (raw.demoUser !== undefined) out.demoUser = address(file, `${path}.demoUser`, raw.demoUser);
+  if (raw.staging !== undefined) out.staging = stagingFlag(file, `${path}.staging`, raw.staging);
   return out;
 }
 

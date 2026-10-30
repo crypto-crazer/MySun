@@ -19,16 +19,13 @@ positions, and the zap-periphery reference pools' `slot0`) and appends one JSONL
 `DATA_DIR/collect-nav.jsonl` (`backend/data/` by default — gitignored). USD is display-only; USDG is
 the $1 anchor; the pool math mirrors `frontend/src/chain/spot.ts` (bigint multiply-first).
 
-- `pnpm dev:collect-nav` — one cycle, then exit.
-- `pnpm dev:collect-nav-serve` — loop every `COLLECT_INTERVAL_MIN` (default 60) + HTTP
-  (`GET /analytics/nav-history.jsonl`, `GET /healthz`, CORS `*`).
-- `pnpm collect-nav` — compiled (dist) one-shot.
+- `pnpm dev:collect-nav` — one cycle, then exit (legacy entrypoint; the deployed collector is
+  the Cloudflare Worker in `cf-analytics/` — see `TASK-CF-ANALYTICS.md`).
 
-Hosting: `Dockerfile.collector` (build context = the repo ROOT, ships `shared/` read-only; the keeper
-image alone has no registry). Railway service `mysun-analytics`: root dir = the repo, Dockerfile
-path = `backend/Dockerfile.collector`, default command (`serve`), a volume mounted at `/data`
-(history survives restarts), env `COLLECT_INTERVAL_MIN` / `PORT`. No secrets — the service has no
-signer and never touches keeper config.
+Hosting (retired 2026-10-22): the collector moved to the Cloudflare Worker `mysun-analytics`
+(`cf-analytics/` — hourly cron, Workers KV/R2 blob; see `TASK-CF-ANALYTICS.md`). The old Railway
+service (`Dockerfile.collector`, volume at `/data`) is shut down; keep the local `once` cycle
+for manual runs.
 
 > **Strategy disclaimer.** The allocation rule here is deliberately boring plumbing: keep a fixed
 > fraction of each basket token idle as a redemption buffer, spread the rest over the registered

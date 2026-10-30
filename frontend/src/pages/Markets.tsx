@@ -2,25 +2,27 @@
  * The home page: the selected chain's vaults, read live from the chain (src/chain/useLiveVaults.ts).
  * The table follows the header's chain selector (useTargetChain): switch chain, see that chain's
  * vaults. TVL is the basket's `totalTokens()` at the live reference-pool spot (USDG at its $1 peg —
- * display only). APR is the original design's fee APR — trading fees over the last 7 days ÷ the mean
+ * display only). APR is the original design's fee APR — trading fees over the last 24 hours ÷ the mean
  * TVL, annualised — from the NAV-history collector (src/chain/feeApy.ts; the same fetch the vault
- * page's chart reads); "—" until 7 days are covered. No volume column: the chain cannot answer it
+ * page's chart reads); "—" until a day of rows exists (MIN_FEE_APR_DAYS). No volume column: the chain
+ * cannot answer it
  * (docs/LIVE-DATA.md). Each row's basket bar is every token's share of that spot value, in the name's
  * order. NAV, the fee, the per-token amounts and the price range are on the vault page.
  * "Deposit" opens the deposit card over this page (`?deposit=<vault id>`), as the original did; the row opens the vault's page.
  */
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useWallet } from '@/wallet/context';
 import { useStore } from '@/store/useStore';
-import { DEPLOYMENTS } from '@/chain/chains';
 import { useTargetChain } from '@/chain/useTargetChain';
-import { basketName, basketOrder, displaySymbol, holdingUsd, resolveVaultRouteId, vaultRouteId } from '@/chain/liveVaults';
+import { basketName, basketOrderIndices, displaySymbol, holdingUsd, resolveVaultRouteId, vaultRouteId } from '@/chain/liveVaults';
 import { useLiveVaults, type LiveVaultRow } from '@/chain/useLiveVaults';
-import { FEE_APR_WINDOW_DAYS, feeApyPct, fmtFeeApr } from '@/chain/feeApy';
+import { useVisibleDeployments } from '@/chain/useVaultCatalog';
+import { FEE_APR_HINT, FEE_APR_WINDOW_DAYS, feeApyPct, fmtFeeApr } from '@/chain/feeApy';
 import { useNavHistoryRows } from '@/chain/useNavHistory';
 import { cx, fmtUsd } from '@/lib/format';
 import { Stat } from '@/components/ui/Stat';
+import { PreviewRegion } from '@/components/ui/Preview';
 import { TokenGroup } from '@/components/ui/TokenIcon';
 import { Button } from '@/components/ui/Button';
 import { Arrow } from '@/components/ui/Arrow';
@@ -36,15 +38,15 @@ type SortKey = 'apr' | 'tvl';
 type SortDir = 'asc' | 'desc';
 type Sort = { key: SortKey; dir: SortDir };
 
-const APR_HINT = 'Trading fees over the last 7 days ÷ average total deposited, annualised. Shows — until 7 days of history exist.';
-
 export function Markets() {
   const { address } = useWallet();
   const { rows: all, spotsFor } = useLiveVaults(address ?? undefined);
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const depositRef = resolveVaultRouteId(params.get('deposit') ?? undefined, DEPLOYMENTS);
+  // Team mode: a `?deposit=` naming a hidden staging vault opens nothing (and reads nothing).
+  const deployments = useVisibleDeployments();
+  const depositRef = resolveVaultRouteId(params.get('deposit') ?? undefined, deployments);
   const depositRow = depositRef.kind === 'found' ? all.find((r) => r.id === vaultRouteId(depositRef.ref.chainId, depositRef.ref.key)) ?? null : null;
   const { selectedChainId } = useTargetChain();
   const chain = String(selectedChainId);
@@ -70,16 +72,30 @@ export function Markets() {
   const mine = rows
     .map((r) => holdingUsd(r.v.receiptBalance, r.v.supply, r.valuation.usd))
     .filter((x): x is number => x !== undefined && x > 0);
-  const showMine = Boolean(address) && mine.length > 0;
-  const connected = useStore((s) => s.connected);
-  // Connected with nothing deposited, the hero has no button: from sm up the reading follows the title, not the ground
-  const tvlUnderTitle = connected && !showMine;
+  // Connected → always "Your deposits" (possibly $0.00); the Connect wallet CTA is for no address only.
+  const showMine = Boolean(address);
+  // The hero's Connect wallet goes once a wallet is connected, as the header's does
+  const showConnect = !useStore((s) => s.connected);
+  // Connected with nothing to show (a wallet mid-switch: the store keeps the last account, the wallet reports none yet), the hero has no button: from sm up the reading follows the title, not the ground
+  const tvlUnderTitle = !showConnect && !showMine;
 
   // The CTA pushes `?deposit=` with a marker, so Back closes the overlay. Closing steps back out of that
   // entry instead of pushing another, so Back afterwards leaves Markets rather than reopening the card;
   // a deep-linked `?deposit=` has no entry of ours to step out of, so it is replaced.
+  // Closing is once per opening: a second close before the step back re-renders (double-click, click + Escape)
+  // would step back again — off Markets, or off the site. Cleared when an overlay opens.
+  const closing = useRef(false);
+  const openDeposit = params.get('deposit');
+  useEffect(() => {
+    if (openDeposit) closing.current = false;
+  }, [openDeposit]);
   const deposit = (r: LiveVaultRow) => setParams({ deposit: r.id }, { state: { depositOverlay: true } });
-  const closeDeposit = () => ((location.state as { depositOverlay?: boolean } | null)?.depositOverlay ? navigate(-1) : setParams({}, { replace: true }));
+  const closeDeposit = () => {
+    if (closing.current) return;
+    closing.current = true;
+    if ((location.state as { depositOverlay?: boolean } | null)?.depositOverlay) navigate(-1);
+    else setParams({}, { replace: true });
+  };
 
   return (
     <div>
@@ -95,7 +111,7 @@ export function Markets() {
               <div className="display text-[clamp(48px,6vw,80px)] leading-none tracking-[-0.02em]">{fmtUsd(mine.reduce((s, x) => s + x, 0), { compact: false })}</div>
             </>
           ) : (
-            <Welcome />
+            <Welcome showConnect={showConnect} />
           )}
         </div>
         <div className={cx('wrap relative z-[4] py-6', tvlUnderTitle ? 'sm:pt-10' : 'sm:absolute sm:inset-x-0 sm:bottom-0')}>
@@ -113,8 +129,8 @@ export function Markets() {
         <div className={cx('eyebrow hidden items-center border-b border-stroke-strong px-4 pb-3 lg:grid', COLS)}>
           <span>Vault</span>
           <span>Basket</span>
-          <span className="justify-self-end"><SortHead label="APR" hint={APR_HINT} active={sort.key === 'apr'} dir={sort.dir} onClick={() => toggleSort('apr')} /></span>
-          <span className="justify-self-end"><SortHead label="Total deposited" active={sort.key === 'tvl'} dir={sort.dir} onClick={() => toggleSort('tvl')} /></span>
+          <span className="justify-self-end"><SortHead label={SORT_LABEL.apr} hint={FEE_APR_HINT} active={sort.key === 'apr'} dir={sort.dir} onClick={() => toggleSort('apr')} /></span>
+          <span className="justify-self-end"><SortHead label={SORT_LABEL.tvl} active={sort.key === 'tvl'} dir={sort.dir} onClick={() => toggleSort('tvl')} /></span>
           <span />
         </div>
         <ul>
@@ -131,10 +147,6 @@ export function Markets() {
   );
 }
 
-function nameOf(r: LiveVaultRow): string {
-  return basketName(r.v.ready ? r.v.tokens.map((t) => t.symbol) : [], r.v.entry.label);
-}
-
 // Columns: vault, its basket, APR, total deposited, action
 // A row only fits from lg; below that it stacks as on a phone: the two readings side by side, Deposit across the foot.
 const COLS =
@@ -144,27 +156,38 @@ function VaultRow({ row: r, apr, onDeposit }: { row: LiveVaultRow; apr: number |
   const navigate = useNavigate();
   const { v, valuation } = r;
   const label = 'eyebrow mb-1 block lg:hidden';
-  const symbols = basketOrder(v.tokens.map((t) => t.symbol));
   // The legs follow the on-chain order; the bar reads in the name's
-  const order = symbols.map((s) => v.tokens.findIndex((t) => t.symbol === s));
+  const order = basketOrderIndices(v.tokens);
+  const symbols = order.map((i) => v.tokens[i].symbol);
+  const name = basketName(symbols, v.entry.label);
   const loading = !v.failed && (!v.ready || (r.spotsLoading && valuation.usd === undefined));
-  const usdCell = (x: number | undefined, fmt: (n: number) => string) =>
-    v.failed ? <span className="text-weaker">—</span> : loading ? <Spinner className="h-4 w-4 text-weaker inline-block" /> : x === undefined ? <span className="text-weaker">—</span> : fmt(x);
+  const tvl = valuation.usd;
 
   return (
-    <li
+    // A staging vault (team mode only) takes the preview mark: the edge sits in the row's left padding, so no column moves
+    <PreviewRegion
+      as="li"
+      active={v.entry.staging === true}
       data-vault={r.id}
       className={cx(
         'grid cursor-pointer grid-cols-2 items-center gap-x-6 gap-y-3 border-b border-stroke-weak px-3 py-4 lg:px-4 transition-colors duration-300 ease-dusk hover:bg-strong/[0.035]',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-stroke-focused',
         "[grid-template-areas:'pair_pair''mix_mix''apr_tvl''act_act'] lg:[grid-template-areas:none]",
         COLS,
       )}
       onClick={() => navigate(`/vault/${r.id}`)}
+      // The row is the way to the vault page: reachable from the keyboard too (Enter / Space on the row itself, not its Deposit button)
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        navigate(`/vault/${r.id}`);
+      }}
     >
       <div className="flex min-w-0 items-start gap-3 [grid-area:pair] [--name:28px] lg:[grid-area:auto]">
         {symbols.length > 0 && <span className="flex shrink-0 mt-[calc((var(--name)-26px)/2)]"><TokenGroup symbols={symbols} size={26} /></span>}
         <div className="min-w-0">
-          <div className="font-serif text-xl font-normal leading-[var(--name)] text-strong lg:truncate" title={nameOf(r)}>{nameOf(r)}</div>
+          <div data-preview-keep className="font-serif text-xl font-normal leading-[var(--name)] text-strong lg:truncate" title={name}>{name}</div>
           {/* Only an exception earns a line under the name */}
           {v.paused && <div className="mt-1 text-2xs text-warning">Paused</div>}
           {v.failed && <div className="mt-1 text-2xs text-warning">Chain not reachable</div>}
@@ -178,14 +201,16 @@ function VaultRow({ row: r, apr, onDeposit }: { row: LiveVaultRow; apr: number |
           !loading && <span className="hidden text-weaker lg:inline">—</span>
         )}
       </div>
-      <div className="num text-xl text-weak lg:text-md [grid-area:apr] lg:justify-self-end lg:[grid-area:auto]" title={APR_HINT}><span className={label}>APR</span>{apr === undefined ? <span className="text-weaker">—</span> : fmtFeeApr(apr)}</div>
-      <div className="display num text-xl text-strong [grid-area:tvl] lg:justify-self-end lg:[grid-area:auto]"><span className={label}>Total deposited</span>{usdCell(valuation.usd, (n) => fmtUsd(n, { cents: n < 10_000 }))}</div>
+      <div className="num text-xl text-weak lg:text-md [grid-area:apr] lg:justify-self-end lg:[grid-area:auto]" title={FEE_APR_HINT}><span className={label}>{SORT_LABEL.apr}</span>{apr === undefined ? <span className="text-weaker">—</span> : fmtFeeApr(apr)}</div>
+      <div className="display num text-xl text-strong [grid-area:tvl] lg:justify-self-end lg:[grid-area:auto]"><span className={label}>{SORT_LABEL.tvl}</span>
+        {loading ? <Spinner className="h-4 w-4 text-weaker inline-block" /> : v.failed || tvl === undefined ? <span className="text-weaker">—</span> : fmtUsd(tvl, { cents: tvl < 10_000 })}
+      </div>
       <div className="mt-2 self-center [grid-area:act] lg:mt-0 lg:justify-self-end lg:[grid-area:auto]">
         <Button size="sm" className="w-full lg:w-auto" disabled={v.paused === true} onClick={(e) => { e.stopPropagation(); onDeposit(); }}>
           {v.paused ? 'Paused' : 'Deposit'}
         </Button>
       </div>
-    </li>
+    </PreviewRegion>
   );
 }
 
@@ -268,5 +293,5 @@ function SortHead({ label, hint, active, dir, onClick }: { label: string; hint?:
       <span className="sr-only">{active ? `, sorted ${dir === 'desc' ? 'descending' : 'ascending'}` : ', sortable'}</span>
     </button>
   );
-  return hint ? <Tooltip content={hint} wide align="end" className="normal-case tracking-normal">{head}</Tooltip> : head;
+  return hint ? <Tooltip content={hint} wide align="end">{head}</Tooltip> : head;
 }

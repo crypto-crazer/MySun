@@ -1,5 +1,6 @@
 /**
- * Entrypoint for the NAV/fee snapshot collector (Railway service `mysun-analytics`).
+ * Entrypoint for the NAV/fee snapshot collector — legacy (superseded by the Cloudflare Worker
+ * `mysun-analytics`, see backend/cf-analytics). Kept for reference and local `once` runs.
  *
  *   node dist/collect-nav-cli.js once      # one snapshot cycle, then exit
  *   node dist/collect-nav-cli.js serve     # snapshot every COLLECT_INTERVAL_MIN + HTTP (default)

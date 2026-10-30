@@ -1,5 +1,6 @@
 /**
- * Header network selector: every registry chain (SUPPORTED_CHAINS), the target chain ticked.
+ * Header network selector: every chain this build offers (SUPPORTED_CHAINS — mainnet, plus the demo
+ * chain in a local/dev build only), the target chain ticked.
  * Picking one records it as the selected chain and, with a wallet connected, asks the wallet to
  * switch (adding the chain first if the wallet does not know it). Chains without a deployment are
  * listed — you can go there — but marked so nobody expects a vault.

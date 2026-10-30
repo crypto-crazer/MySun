@@ -3,13 +3,14 @@ import { BaseError, ContractFunctionRevertedError, encodeErrorResult, type Hex }
 import { minSharesFromPreview } from '@/chain/deposit';
 import {
   ZAP_DEFAULT_SLIPPAGE_BPS,
+  ZAP_LEG_SLIPPAGE_BPS,
   ZAP_MAX_SLIPPAGE_BPS,
   describeZapError,
+  isZapRouteSymbol,
   parseZapDepositAmount,
   parseZapRedeemShares,
   parseZapSlippage,
   zapInCallAbi,
-  zapLegSlippageBps,
   zapMinDeposit,
   zapMinimum,
   zapOutCallAbi,
@@ -47,19 +48,24 @@ describe('zap slippage — default 25 bps, clamped to the 50 bps route cap', () 
   });
 });
 
-describe('zapLegSlippageBps — the per-leg bound must clear the dearest route fee', () => {
-  it('a fee-100 route (1 bp): the tolerance is sent as-is', () => {
-    expect(zapLegSlippageBps(ZAP_DEFAULT_SLIPPAGE_BPS, 1)).toBe(25);
-    expect(zapLegSlippageBps(ZAP_MAX_SLIPPAGE_BPS, 1)).toBe(50);
+describe('ZAP_LEG_SLIPPAGE_BPS — the per-leg bound is always 0 (each route’s own cap; owner policy 2026-10-27)', () => {
+  it('is 0: the contract reads 0 as "the route’s own maxSlippageBps"', () => {
+    expect(ZAP_LEG_SLIPPAGE_BPS).toBe(0);
   });
-  it('a fee-10000 route (100 bps): no tolerance up to the cap could fill — 0 = each route’s own cap', () => {
-    expect(zapLegSlippageBps(ZAP_DEFAULT_SLIPPAGE_BPS, 100)).toBe(0);
-    expect(zapLegSlippageBps(ZAP_MAX_SLIPPAGE_BPS, 100)).toBe(0);
-  });
-  it('a tolerance equal to the fee cannot fill either; 0 stays 0', () => {
-    expect(zapLegSlippageBps(30, 30)).toBe(0);
-    expect(zapLegSlippageBps(31, 30)).toBe(31);
-    expect(zapLegSlippageBps(0, 1)).toBe(0);
+  // Live RHC 4663 stock routes (fork fill matrix, contracts/test/fork/ZapStockFill.fork.t.sol): fee-500 / cap 100,
+  // fee-3000 / cap 150, fee-10000 / cap 300 — and the tri vault's fee-10000 PONS next to a 50 bps WETH cap.
+  // Whatever the fee tier, cap or tolerance, the leg bound sent is 0 (never `SlippageTooLoose`, never a bound
+  // below a route's fee), while τ alone sets the minimum.
+  it.each([
+    ['fee-500', 5, 100],
+    ['fee-3000', 30, 150],
+    ['fee-10000', 100, 300],
+    ['tri (fee-10000 PONS, 50 bps WETH cap)', 100, 50],
+  ])('%s route (%i bps fee, cap %i): leg 0, τ only bounds the minimum', (_label, _feeBps, capBps) => {
+    expect(ZAP_LEG_SLIPPAGE_BPS).toBeLessThanOrEqual(capBps);
+    for (const tau of [0, ZAP_DEFAULT_SLIPPAGE_BPS, ZAP_MAX_SLIPPAGE_BPS]) {
+      expect(zapMinimum(1_000_000n, tau)).toBe(minSharesFromPreview(1_000_000n, tau));
+    }
   });
 });
 
@@ -88,6 +94,38 @@ describe('zap deposit amount — USDG (6 dp), 1 USDG floor', () => {
 
   it('names the route token it was given', () => {
     expect(parseZapDepositAmount('0.5', USDG, 'mUSDG')).toEqual({ ok: false, error: 'Minimum 1 mUSDG — smaller zaps are dust' });
+  });
+});
+
+describe('zap deposit floor — ≈ $1 at the display price, whole tokens without one', () => {
+  it('USDG at its $1 peg: still exactly 1 USDG', () => {
+    expect(zapMinDeposit(USDG, 1)).toBe(1_000_000n);
+    expect(parseZapDepositAmount('1', USDG, 'USDG', 1)).toEqual({ ok: true, value: 1_000_000n });
+    expect(parseZapDepositAmount('0.999999', USDG, 'USDG', 1)).toEqual({ ok: false, error: 'Minimum 1 USDG — smaller zaps are dust' });
+  });
+
+  it('WETH at $2,500: $1 is 0.0004 WETH (not 1 WETH)', () => {
+    expect(zapMinDeposit(18, 2_500)).toBe(4n * 10n ** 14n);
+    expect(parseZapDepositAmount('0.0004', 18, 'WETH', 2_500)).toEqual({ ok: true, value: 4n * 10n ** 14n });
+    expect(parseZapDepositAmount('0.00039', 18, 'WETH', 2_500)).toEqual({ ok: false, error: 'Minimum 0.0004 WETH — smaller zaps are dust' });
+    expect(parseZapDepositAmount('0.5', 18, 'WETH', 2_500)?.ok).toBe(true);
+  });
+
+  it('rounds UP to two significant digits, so the minimum shown is itself accepted', () => {
+    // $1 / $3,123.45 = 0.000320158… WETH → 0.00033
+    expect(zapMinDeposit(18, 3_123.45)).toBe(33n * 10n ** 13n);
+    const r = parseZapDepositAmount('0.0001', 18, 'WETH', 3_123.45);
+    expect(r).toEqual({ ok: false, error: 'Minimum 0.00033 WETH — smaller zaps are dust' });
+    expect(parseZapDepositAmount('0.00033', 18, 'WETH', 3_123.45)?.ok).toBe(true);
+    // a cheap token: $1 at $0.003 = 333.33… → 340
+    expect(zapMinDeposit(18, 0.003)).toBe(340n * 10n ** 18n);
+    // finer than the token's decimals: at least one base unit
+    expect(zapMinDeposit(0, 1e6)).toBe(1n);
+  });
+
+  it('no usable price → the whole-token floor (1 token)', () => {
+    for (const p of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(zapMinDeposit(18, p)).toBe(10n ** 18n);
+    expect(parseZapDepositAmount('0.5', 18, 'WETH')).toEqual({ ok: false, error: 'Minimum 1 WETH — smaller zaps are dust' });
   });
 });
 
@@ -120,6 +158,32 @@ describe('zapSizeWarning — strictly above 50,000 USDG', () => {
   });
 });
 
+describe('zapSizeWarning — priced: strictly above ≈ $50,000', () => {
+  it('USDG at $1: the same threshold, worded in dollars', () => {
+    const k50 = 50_000n * 10n ** 6n;
+    expect(zapSizeWarning(k50, USDG, 'USDG', 1)).toBeNull();
+    const w = zapSizeWarning(k50 + 1n, USDG, 'USDG', 1);
+    expect(w).toContain('$50,000');
+    expect(w).toContain('$26.6k');
+  });
+  it('WETH at $2,500: 20 WETH is the line, not 50,000 WETH', () => {
+    expect(zapSizeWarning(20n * 10n ** 18n, 18, 'WETH', 2_500)).toBeNull();
+    expect(zapSizeWarning(20n * 10n ** 18n + 1n, 18, 'WETH', 2_500)).toContain('$50,000');
+  });
+  it('no price → whole tokens, as before', () => {
+    expect(zapSizeWarning(20n * 10n ** 18n + 1n, 18, 'WETH')).toBeNull();
+    expect(zapSizeWarning(50_000n * 10n ** 18n + 1n, 18, 'WETH')).toContain('50,000 WETH');
+  });
+});
+
+describe('isZapRouteSymbol — USDG, or the all-mock stack\'s mUSDG', () => {
+  it('matches the anchor under both names, nothing else', () => {
+    expect(isZapRouteSymbol('USDG')).toBe(true);
+    expect(isZapRouteSymbol('mUSDG')).toBe(true);
+    for (const s of ['WETH', 'mWETH', 'USDGX', 'usdg', '0xabcd…1234']) expect(isZapRouteSymbol(s)).toBe(false);
+  });
+});
+
 describe('zapMinimum — the in-kind minShares math, one implementation', () => {
   it('equals minSharesFromPreview for shares and USDG amounts alike', () => {
     for (const [expected, bps] of [
@@ -149,7 +213,8 @@ describe('zap error mapping — typed guard reverts become one sentence', () => 
 
   it('zap-in guard errors', () => {
     expect(describeZapError(revert(zapInCallAbi, 'ZapIn__SlippageTooLoose', [100, 50]))).toBe('Slippage 1% is looser than the route’s cap of 0.5%.');
-    expect(describeZapError(revert(zapInCallAbi, 'ZapIn__AmountTooSmall', ['0x0000000000000000000000000000000000000001']))).toContain('Zap at least 1 USDG');
+    expect(describeZapError(revert(zapInCallAbi, 'ZapIn__AmountTooSmall', ['0x0000000000000000000000000000000000000001']))).toContain('Zap a larger amount of USDG');
+    expect(describeZapError(revert(zapInCallAbi, 'ZapIn__AmountTooSmall', ['0x0000000000000000000000000000000000000001']), { routeSymbol: 'WETH' })).toContain('Zap a larger amount of WETH');
     expect(describeZapError(revert(zapInCallAbi, 'ZapIn__SpotDeviatesFromTwap', ['0x0000000000000000000000000000000000000001', 10, 0, 50]))).toContain('off its TWAP');
   });
 

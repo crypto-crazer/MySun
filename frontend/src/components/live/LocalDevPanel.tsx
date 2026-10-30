@@ -1,6 +1,7 @@
 /**
  * Local-chain conveniences. Rendered ONLY when the target chain is the local Anvil stack
- * (`isLocalChain`) and no wallet is on another network. The mint rows need the public
+ * (`isLocalChain` — never in a production build: the demo chain ships in local/dev builds only)
+ * and no wallet is on another network. The mint rows need the public
  * `MockToken.mint`, so they are shown only when the stack is mintable (`canMintMocks`): on the RHC
  * fork (`mintable: false`) the mint rows are gone and the fund path (src/chain/faucet.ts) sends
  * the basket instead — every token by an impersonated call from the pool: a `transfer` for a real
@@ -14,7 +15,7 @@ import { useState } from 'react';
 import { mockTokenAbi } from '@/config/generated';
 import { useWallet } from '@/wallet/context';
 import { waitForReceipt } from '@/chain/client';
-import { canMintMocks, chainLabel, isForkDeployment, resolveLocalRpcUrl } from '@/chain/chains';
+import { canMintMocks, chainLabel, isForkDeployment, isLocalChain, resolveLocalRpcUrl } from '@/chain/chains';
 import { formatAmount, parseAmount, shortHex } from '@/chain/amounts';
 import { faucetAmount, faucetKind, fundEth, impersonatedFund } from '@/chain/faucet';
 import { describeChainError } from '@/chain/errors';
@@ -30,7 +31,6 @@ const DEFAULT_MINT = '1000';
 export function LocalDevPanel({ vault, user }: { vault: LiveVault; user: UserBasket }) {
   const { address, write } = useWallet();
   const { connectWallet, isPending: connecting } = useConnectWallet();
-  const readOnlyMode = useStore((s) => s.readOnlyMode);
   const pushToast = useStore((s) => s.pushToast);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<string | null>(null);
@@ -104,7 +104,8 @@ export function LocalDevPanel({ vault, user }: { vault: LiveVault; user: UserBas
   };
 
   const { deployment, entry } = vault;
-  if (!deployment || !entry) return null;
+  // The page mounts this on the demo chain only; refuse anything else (and a build without it) here too.
+  if (!deployment || !entry || !isLocalChain(vault.chainId)) return null;
   const mintable = canMintMocks(deployment);
   const fork = isForkDeployment(deployment);
 
@@ -183,11 +184,6 @@ export function LocalDevPanel({ vault, user }: { vault: LiveVault; user: UserBas
             anvil-impersonated call from the pool (transfer for a real token, mint for a mock), local node
             only, no wallet prompts.
           </p>
-          {!address && readOnlyMode && (
-            <p className="mt-2 text-2xs text-weaker">
-              Read-only mode cannot fund or sign. Connect a browser wallet to fund it.
-            </p>
-          )}
           {error && <div className="mt-2"><Message tone="error">{error}</Message></div>}
         </>
       )}

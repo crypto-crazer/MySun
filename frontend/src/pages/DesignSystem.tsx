@@ -11,8 +11,9 @@ import { DEFAULT_TAB, TABS, type TabConfig, type TabId } from './design-system/n
 
 /**
  * /design-system — the gallery of tokens and base components. Every specimen is the component the
- * app renders, so the page cannot drift from the product. It is not linked from the header: reach it
- * by address. Rules and token tables in prose live in docs/design-system.md.
+ * app renders, so the page cannot drift from the product. Behind team mode (src/lib/teamMode.ts): not
+ * linked from the header, its route registers only while unlocked, and locked visitors fall through to
+ * the catch-all. Rules and token tables in prose live in docs/design-system.md.
  */
 
 const CONTENT: Record<TabId, () => JSX.Element> = {

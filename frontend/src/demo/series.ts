@@ -1,6 +1,6 @@
 /**
- * Seeded, smooth mock time series for charts. Deterministic per seed so the
- * demo looks identical on every load.
+ * The vault chart's illustrative fallback line (`illustrativeNavSeries`): a seeded, smooth path,
+ * deterministic per seed so it looks identical on every load.
  */
 
 export function mulberry32(seed: number): () => number {
@@ -75,96 +75,11 @@ export function navSeries(vaultId: string, ppsEnd: number, benchmarkLead: number
   return out;
 }
 
-export interface WeekPoint {
-  week: string;
-  emissionsUsd: number;
-  buybacksUsd: number;
-  coverage: number;
-}
-
-/**
- * 8-week Emissions vs Buybacks. Emissions wobble $38–42K; buybacks climb
- * smoothly to `buybackEnd`. The final week is pinned to the protocol numbers
- * so the chart, the top stats and the "This week" card all agree.
- */
-export function emissionsSeries(emissionsEnd: number, buybackEnd: number, weeks = 8): WeekPoint[] {
-  const rnd = mulberry32(hashSeed('flywheel'));
-  const out: WeekPoint[] = [];
-  for (let i = 0; i < weeks; i++) {
-    const t = i / (weeks - 1);
-    const last = i === weeks - 1;
-    const emissions = last ? emissionsEnd : 38_000 + rnd() * 4_000;
-    // ease-in climb from $3.2K
-    const buyback = last ? buybackEnd : 3_200 + (buybackEnd - 3_200) * Math.pow(t, 1.35) * (0.96 + rnd() * 0.06);
-    out.push({
-      week: `W${i + 1}`,
-      emissionsUsd: Math.round(emissions),
-      buybacksUsd: Math.round(buyback),
-      coverage: buyback / emissions,
-    });
-  }
-  return out;
-}
-
-export interface PricePoint {
-  t: number; // epoch ms
-  price: number;
-}
-
-/**
- * 7-day price path ending exactly at `end`. Starts near `center` so the path
- * reads as "mostly inside the range" for in-range vaults and "drifted out"
- * for out-of-range ones. 2-hour resolution.
- */
-export function priceSeries(vaultId: string, center: number, end: number, widthPct: number, now = new Date()): PricePoint[] {
-  const points = 85; // 7d × 12 + 1
-  const seed = hashSeed(`${vaultId}-price`);
-  const rnd = mulberry32(seed);
-  const start = center * (1 + (rnd() - 0.5) * widthPct * 0.6);
-  const path = smoothPath(seed ^ 0x51ed270b, points, start, end, widthPct * 0.045);
-  const stepMs = (7 * 86_400_000) / (points - 1);
-  const t0 = now.getTime() - 7 * 86_400_000;
-  return path.map((price, i) => ({ t: t0 + i * stepMs, price }));
-}
-
-/**
- * Hourly price path for the last `days` days — an Ornstein–Uhlenbeck walk that
- * mean-reverts toward `center` (so in-range vaults spend most of the window
- * inside the band) and is pinned to end exactly at `end`.
- */
-export function priceSeriesHourly(vaultId: string, center: number, end: number, widthPct: number, days = 30, now = new Date()): PricePoint[] {
-  const n = days * 24 + 1;
-  const rnd = mulberry32(hashSeed(`${vaultId}-hourly`));
-  const gauss = () => {
-    const u = 1 - rnd();
-    const v = rnd();
-    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-  };
-  const sigma = widthPct * 0.035; // hourly vol as a fraction of price
-  const theta = 0.012;
-  const raw: number[] = [center * (1 + (rnd() - 0.5) * widthPct * 0.5)];
-  for (let i = 1; i < n; i++) {
-    const x = raw[i - 1];
-    const next = x + theta * (center - x) + sigma * center * gauss();
-    raw.push(Math.max(next, center * 0.2));
-  }
-  // pin the end while keeping the shape: blend a linear shift over the last 25%.
-  const shift = end - raw[n - 1];
-  const tail = Math.floor(n * 0.25);
-  const out: number[] = raw.map((p, i) => {
-    const k = i < n - tail ? 0 : (i - (n - tail)) / (tail - 1);
-    return p + shift * k;
-  });
-  const hourMs = 3_600_000;
-  const t0 = Math.floor(now.getTime() / hourMs) * hourMs - (n - 1) * hourMs;
-  return out.map((price, i) => ({ t: t0 + i * hourMs, price }));
-}
-
 /**
  * ILLUSTRATIVE receipt-token price path for a live vault page. The chain has no history to draw
  * (no indexer; RHC v3 TWAP observations are degenerate chain-wide), so the SHAPE is invented — but
  * its last point is pinned to the live spot NAV when one is known, so the chart never contradicts the
- * live readout beside it. Rendered under a Demo badge, always.
+ * live readout beside it. Rendered under an Illustrative badge, always.
  */
 export function illustrativeNavSeries(seed: string, liveNav: number | undefined, days = 30, now = new Date()): NavPoint[] {
   const raw = navSeries(seed, 1.006, 0, days, now);

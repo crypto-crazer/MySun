@@ -4,13 +4,18 @@ import { Tooltip } from './Tooltip';
 
 /**
  * Provenance tags. Every number on screen is one of two things and the UI has to say which:
- *  - <DemoBadge/>  — invented figure from src/demo (no chain can produce it: APR, USD, PMG)
+ *  - <DemoBadge/>  — a figure the chain cannot give (today: the vault chart's illustrative line,
+ *                    src/demo/series.ts); the APR and USD figures are live
  *  - <LiveBadge/>  — read from the deployed vault over RPC
- * See notes/frontend/INTEGRATION.md (internal) for the full mapping.
+ * `tooltip` lets a call site say why its figure is not live; the default is the gallery's wording.
  */
-export function DemoBadge({ className, label = 'Demo data' }: { className?: string; label?: string }) {
+export function DemoBadge({
+  className,
+  label = 'Demo data',
+  tooltip = 'Prototype figure — invented, not read from any chain.',
+}: { className?: string; label?: string; tooltip?: string }) {
   return (
-    <Tooltip content="Prototype figure — invented, not read from any chain." wide>
+    <Tooltip content={tooltip} wide>
       <span
         className={cx(
           'inline-flex items-center gap-2 h-6 px-2 rounded border border-dashed border-stroke-warning/55 text-2xs font-medium uppercase tracking-[0.1em] leading-none text-warning whitespace-nowrap cursor-help',
@@ -45,7 +50,7 @@ export function LiveBadge({ className, label = 'Live on-chain' }: { className?: 
   );
 }
 
-/** One-line legend for pages that mix both kinds of number. */
+/** One-line legend for pages that mix both kinds of number. Gallery-only today (design-system DataDisplay): no app page mixes them. */
 export function DataLegend({ className }: { className?: string }) {
   return (
     <p className={cx('flex flex-wrap items-center gap-2 text-2xs text-weaker', className)}>

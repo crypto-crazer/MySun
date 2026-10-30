@@ -1,4 +1,4 @@
-import { CHAINS, type ChainId } from '@/demo/data/chains';
+import { CHAINS, type ChainId } from '@/lib/chainBrands';
 import { cx } from '@/lib/format';
 
 // First phase: Robinhood Chain only. Add a second chain here and the filter shows itself again.

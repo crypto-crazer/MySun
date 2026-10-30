@@ -16,12 +16,6 @@ export function fmtUsd(v: number, opts: { compact?: boolean; cents?: boolean; te
   return usd0.format(v);
 }
 
-/** Signed money, for PnL. */
-export function fmtUsdSigned(v: number): string {
-  const s = fmtUsd(Math.abs(v), { compact: false, cents: Math.abs(v) < 10_000 });
-  return v > 0 ? `+${s}` : v < 0 ? `-${s}` : s;
-}
-
 /** APR with 1 decimal. */
 export function fmtPct(v: number, digits = 1): string {
   return `${(v * 100).toFixed(digits)}%`;
@@ -38,11 +32,6 @@ export function fmtToken(v: number, maxDecimals = 4): string {
   const abs = Math.abs(v);
   const decimals = abs >= 10_000 ? Math.min(maxDecimals, 0) : abs >= 100 ? Math.min(maxDecimals, 2) : maxDecimals;
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: decimals, minimumFractionDigits: 0 }).format(v);
-}
-
-/** Whole-number token counts (e.g. PMG emissions). */
-export function fmtInt(v: number): string {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v);
 }
 
 /** Pool prices: adaptive significant digits so $425.80 and 0.00184 both read well. */
@@ -64,20 +53,6 @@ export function fmtQuote(v: number): string {
   if (abs >= 1) return v.toFixed(3);
   if (abs >= 0.01) return v.toFixed(4);
   return v.toPrecision(3);
-}
-
-export function fmtMultiplier(v: number): string {
-  return `×${(Math.floor(v * 100 + 1e-9) / 100).toFixed(2).replace(/\.?0+$/, '')}`;
-}
-
-export function fmtDate(d: Date | string | number): string {
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(d));
-}
-
-export function fmtRelativeDays(days: number): string {
-  if (days < 1) return 'today';
-  const d = Math.round(days);
-  return `${d}d ago`;
 }
 
 export function shortAddress(a: string): string {

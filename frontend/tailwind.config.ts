@@ -16,7 +16,6 @@ import { TYPE_SCALE, cssVariables, tailwindColors } from './src/lib/tokens';
 // Draw a real circle with `rounded-circle`.
 
 export default {
-  darkMode: 'class',
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     colors: tailwindColors(),
@@ -50,18 +49,16 @@ export default {
         fade: { from: { opacity: '0' }, to: { opacity: '1' } },
         'slide-in': { from: { opacity: '0', transform: 'translateX(40px)' }, to: { opacity: '1', transform: 'translateX(0)' } },
         rise: { from: { transform: 'translateY(8px)' }, to: { transform: 'translateY(-2px)' } },
-        spin: { to: { transform: 'rotate(360deg)' } },
       },
       animation: {
         'fade-in': 'fade-in 160ms ease-out',
         fade: 'fade 160ms ease-out',
         'slide-in': 'slide-in 450ms cubic-bezier(0.65, 0, 0.35, 1)',
         rise: 'rise 2s cubic-bezier(0.65, 0, 0.35, 1) infinite alternate',
-        spin: 'spin 800ms linear infinite',
       },
     },
   },
   plugins: [
-    plugin(({ addBase }) => addBase({ ':root, .dark': { 'color-scheme': 'dark', ...cssVariables() } })),
+    plugin(({ addBase }) => addBase({ ':root': { 'color-scheme': 'dark', ...cssVariables() } })),
   ],
 } satisfies Config;

@@ -5,8 +5,9 @@
  *
  *  - In kind: offer a MAX per basket token → `previewDeposit` says the shares and what is pulled →
  *    approve the vault only where the allowance is short → `deposit(tokens, amounts, minShares, me)`.
- *  - USDG only (zap-in), the deposit default: approve the ZAP for exactly the offer →
- *    `zapDeposit(vault, USDG, amount, minShares, legBps, me)`.
+ *  - One token (zap-in), the deposit default where `useZapRoutes` serves the vault — USDG by default, or any basket
+ *    token the zap routes to every other one: approve the ZAP for exactly the offer →
+ *    `zapDeposit(vault, token, amount, minShares, 0, me)` (leg bound 0 = each route's own cap).
  *  - Withdraw: `redeem(shares, me)` in kind, or `zapRedeem` to USDG only (approve the zap for the shares).
  *
  * `minShares` / `minAmountOut` are quoted at SIGNING time: the preview is re-read just before the
@@ -14,7 +15,7 @@
  * A paused vault freezes every action ("Vault is paused"). USD figures (≈ $) are display only: live
  * reference-pool spots and the live spot NAV, passed in by the page.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Address } from 'viem';
 import { erc20Abi, parseEventLogs } from 'viem';
@@ -30,6 +31,7 @@ import { formatAmount, formatAmountSignificant, parseAmount, toExactString } fro
 import {
   DEFAULT_SLIPPAGE_BPS,
   dispatchBasket,
+  fillAtMix,
   insufficientBalance,
   minSharesFromPreview,
   parseSlippageBps,
@@ -38,14 +40,14 @@ import {
 import { describeChainError } from '@/chain/errors';
 import {
   ZAP_DEFAULT_SLIPPAGE_BPS,
+  ZAP_LEG_SLIPPAGE_BPS,
   ZAP_MAX_SLIPPAGE_BPS,
-  ZAP_ROUTE_SYMBOL,
   describeZapError,
+  isZapRouteSymbol,
   parseZapDepositAmount,
   parseZapRedeemShares,
   parseZapSlippage,
   zapInCallAbi,
-  zapLegSlippageBps,
   zapMinimum,
   zapOutCallAbi,
   zapSizeWarning,
@@ -64,7 +66,7 @@ import {
   type UserBasket,
   type ZapRoute,
 } from '@/chain/useVault';
-import { basketName, basketOrder, displaySymbol, feeLabel, tokenUsdPrices, vaultRouteId } from '@/chain/liveVaults';
+import { basketName, basketOrder, basketOrderIndices, displaySymbol, feeLabel, tokenUsdPrices, vaultRouteId } from '@/chain/liveVaults';
 import type { LiveVaultRow } from '@/chain/useLiveVaults';
 import type { ChainSpots } from '@/chain/useSpotPrices';
 import { useStore } from '@/store/useStore';
@@ -72,6 +74,7 @@ import { cx, fmtPrice, fmtUsd } from '@/lib/format';
 import { Arrow } from '@/components/ui/Arrow';
 import { Button } from '@/components/ui/Button';
 import { PercentInput } from '@/components/ui/PercentInput';
+import { useDismiss } from '@/components/ui/Popover';
 import { SlidingKey } from '@/components/ui/SlidingKey';
 import { Spinner } from '@/components/ui/Spinner';
 import { TokenGroup, TokenIcon } from '@/components/ui/TokenIcon';
@@ -93,15 +96,13 @@ interface Props {
   initialAmount?: string;
   /** Name the vault and link to its page. On for the overlay; off on the vault page, which already says so. */
   showVaultLink?: boolean;
-  /** The basket's symbols when the page already read them, so the name and the choice are right from the first frame. */
-  symbols?: string[];
 }
 
-export function DepositCard({ vault: v, user, usdPrices, nav, initialAmount, showVaultLink = true, symbols: known }: Props) {
+export function DepositCard({ vault: v, user, usdPrices, nav, initialAmount, showVaultLink = true }: Props) {
   const [tab, setTab] = useState<Tab>('deposit');
   const routes = useZapRoutes(v);
-  // Until the token reads land the card's own symbols are bare addresses: take the page's, else wait for them
-  const symbols = basketOrder(known ?? (v.isLoading ? [] : v.tokens.map((t) => t.symbol)));
+  // The vault lists its tokens only once their symbols are read (seeded from the page's catalogue row)
+  const symbols = basketOrder(v.tokens.map((t) => t.symbol));
   const unreachable = v.hasDeployment && (Boolean(v.error) || (!v.isLoading && v.tokens.length === 0));
   const ctx: FormContext = { vault: v, symbols, user, usdPrices: usdPrices ?? new Map(), nav };
 
@@ -154,7 +155,7 @@ export function DepositCard({ vault: v, user, usdPrices, nav, initialAmount, sho
             </Message>
           ) : tab === 'deposit' ? (
             // The zap form's shape holds while the vault's reads and the route land, so nothing flashes in
-            <DepositForm ctx={ctx} route={routes.zapIn} initialAmount={initialAmount} />
+            <DepositForm ctx={ctx} routes={routes.zapIn} routePending={routes.zapInStatus === 'probing'} initialAmount={initialAmount} />
           ) : v.tokens.length === 0 ? (
             <div className="flex justify-center py-10"><Spinner className="h-5 w-5 text-weaker" /></div>
           ) : (
@@ -192,31 +193,6 @@ const vaultName = (v: LiveVault) => basketName(v.tokens.map((t) => t.symbol), v.
 
 /** Whole-token display value of a raw amount (USD estimates only — never fed to a transaction). */
 const whole = (raw: bigint, decimals: number) => Number(raw) / 10 ** decimals;
-
-/** Decimals an auto-filled basket amount keeps (fewer when the token has fewer). */
-const FILL_DECIMALS = 6;
-
-/**
- * The basket fields after the user types `input` into field `from`: the others follow at the vault's
- * current mix (amount_i = typed × T_i / T_from), rounded UP to FILL_DECIMALS so the typed token stays
- * the one that sets the deposit. Clearing a field clears them all. A field the mix cannot size (totals
- * not read yet, a token the vault does not hold, a typo) keeps what was there.
- */
-function fillAtMix(tokens: TokenMeta[], totals: bigint[], current: Record<string, string>, from: number, input: string): Record<string, string> {
-  if (input.trim() === '') return {};
-  const next = { ...current, [tokens[from].address]: input };
-  const parsed = parseAmount(input, tokens[from].decimals);
-  const base = totals[from] ?? 0n;
-  if (!parsed.ok || base === 0n) return next;
-  tokens.forEach((t, i) => {
-    const total = totals[i] ?? 0n;
-    if (i === from || total === 0n) return;
-    const step = 10n ** BigInt(Math.max(t.decimals - FILL_DECIMALS, 0));
-    const den = base * step;
-    next[t.address] = toExactString(((parsed.value * total + den - 1n) / den) * step, t.decimals);
-  });
-  return next;
-}
 
 /** How the basket fields fill: the tooltip on the in-kind "Amount" label. */
 const MIX_EXPLAINER =
@@ -299,28 +275,63 @@ function YouReceive({ shares, decimals, symbol, usd }: { shares?: bigint; decima
 }
 
 /**
- * The zap's pay-with token, as a menu: every token the chain has a zap-in route for, each with the
- * wallet's balance. The chain lists one route token today, so the menu holds one row until it lists more.
+ * The zap's pay-with token: every basket token the chain has a full zap-in route set for, each with the
+ * wallet's balance. A menu when there is a choice (arrow keys move through it); one candidate is just its label.
  */
 function TokenPicker({ tokens, balances, value, onChange, connected }: { tokens: TokenMeta[]; balances: bigint[]; value: number; onChange: (i: number) => void; connected: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const items = useRef<(HTMLButtonElement | null)[]>([]);
+  // The row to focus once the menu has mounted (opened from the keyboard)
+  const focusOnOpen = useRef<number | null>(null);
 
+  // Escape closes the menu, not the deposit overlay it sits in
+  useDismiss(ref, open, setOpen);
   useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
+    if (!open || focusOnOpen.current === null) return;
+    items.current[focusOnOpen.current]?.focus();
+    focusOnOpen.current = null;
   }, [open]);
 
   const current = tokens[value];
+  if (tokens.length < 2) {
+    return (
+      <span className="inline-flex items-center gap-2 whitespace-nowrap text-base font-medium">
+        <TokenIcon symbol={current.symbol} size={20} />
+        {current.symbol}
+      </span>
+    );
+  }
+
+  const focusItem = (i: number) => items.current[(i + tokens.length) % tokens.length]?.focus();
+  const onTriggerKey = (e: KeyboardEvent) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    if (open) return focusItem(value);
+    focusOnOpen.current = value;
+    setOpen(true);
+  };
+  const onMenuKey = (e: KeyboardEvent) => {
+    const at = items.current.findIndex((el) => el === document.activeElement);
+    const to = e.key === 'ArrowDown' ? at + 1 : e.key === 'ArrowUp' ? at - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tokens.length - 1 : null;
+    if (to === null) return;
+    e.preventDefault();
+    focusItem(to);
+  };
+  const pick = (i: number) => {
+    onChange(i);
+    setOpen(false);
+    trigger.current?.focus();
+  };
+
   return (
     <div className="relative shrink-0" ref={ref}>
       <button
+        ref={trigger}
         type="button"
         onClick={() => setOpen(!open)}
+        onKeyDown={onTriggerKey}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Pay with ${current.symbol}`}
@@ -334,15 +345,17 @@ function TokenPicker({ tokens, balances, value, onChange, connected }: { tokens:
         <ul
           role="listbox"
           aria-label="Pay with"
+          onKeyDown={onMenuKey}
           className="absolute right-0 top-full mt-2 w-60 bg-background-popover border border-stroke-strong rounded-md shadow-pop p-1 animate-fade-in z-40"
         >
           {tokens.map((t, i) => (
             <li key={t.address} role="option" aria-selected={i === value}>
               <button
+                ref={(el) => { items.current[i] = el; }}
                 type="button"
-                onClick={() => { onChange(i); setOpen(false); }}
+                onClick={() => pick(i)}
                 className={cx(
-                  'w-full rounded px-3 py-2 text-left text-base flex items-center gap-2 hover:bg-background-elevated',
+                  'w-full rounded px-3 py-2 text-left text-base flex items-center gap-2 hover:bg-background-elevated focus-visible:bg-background-elevated',
                   i === value ? 'text-strong' : 'text-weak',
                 )}
               >
@@ -367,18 +380,22 @@ interface ChoiceOption {
   disabled?: boolean;
 }
 
+/** The basket's USDG — the zap's default token — once the vault's tokens are read. */
+const zapAnchor = (v: LiveVault) => v.tokens.find((t) => isZapRouteSymbol(t.symbol));
+
 /**
- * The whole basket in kind, "Both" or "All", and the zap's one token ("USDG"): both always there, so
- * the groove never changes shape. Every vault deployed today is served by the zap.
+ * The whole basket in kind, "Both" or "All", and the zap's one token ("USDG", or the picked pay-with token):
+ * both always there, so the groove never changes shape.
  * The form's default goes first: `zapFirst` (deposit) puts USDG on the left, withdraw keeps the basket there.
  * Each key stays unpickable until what it needs has landed: the basket's tokens, or the zap's route.
  */
 function modeOptions({ vault: v, symbols }: FormContext, route: ZapRoute | undefined, zapFirst = false): ChoiceOption[] {
-  const symbol = route?.token.symbol ?? ZAP_ROUTE_SYMBOL;
+  // The zap's token as the chain names it: the route's, else the basket's USDG; blank until the basket is read
+  const symbol = route?.token.symbol ?? zapAnchor(v)?.symbol ?? '';
   // The basket's size lands before its symbols do: name the key by the count, and leave it blank until that lands
   const count = symbols.length || v.tokens.length;
   const basket: ChoiceOption = { id: 'basket', label: count === 0 ? '' : count === 2 ? 'Both' : 'All', name: symbols.map(displaySymbol).join(' + '), icon: <TokenGroup symbols={symbols} size={18} />, disabled: v.tokens.length === 0 };
-  const zap: ChoiceOption = { id: 'zap', label: symbol, name: `${symbol} only, through the zap`, icon: <TokenIcon symbol={symbol} size={18} />, disabled: !route };
+  const zap: ChoiceOption = { id: 'zap', label: symbol, name: `${symbol} only, through the zap`, icon: symbol && <TokenIcon symbol={symbol} size={18} />, disabled: !route };
   return zapFirst ? [zap, basket] : [basket, zap];
 }
 
@@ -401,7 +418,7 @@ function TokenChoice({ options, value, onChange }: { options: ChoiceOption[]; va
           title={o.name === o.label ? undefined : o.name}
           className={cx(
             'inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap text-base font-medium transition-colors duration-300 ease-dusk',
-            value === o.id ? 'text-strong' : o.disabled ? 'text-weak cursor-default' : 'text-weak hover:text-strong',
+            value === o.id ? 'text-strong' : cx('text-weak', o.disabled ? 'cursor-default' : 'hover:text-strong'),
           )}
         >
           {o.icon}
@@ -416,12 +433,13 @@ function TokenChoice({ options, value, onChange }: { options: ChoiceOption[]; va
  * The fold under the button: a "Details" eyebrow, like the card's other labels, that opens the rows.
  * `disabled` draws it closed with nothing to open (the zap's pending shape).
  */
-function DetailsFold({ open, onToggle, disabled, children }: { open: boolean; onToggle: () => void; disabled?: boolean; children?: ReactNode }) {
+function DetailsFold({ disabled, children }: { disabled?: boolean; children?: ReactNode }) {
+  const [open, setOpen] = useState(false);
   return (
     <>
       <button
         type="button"
-        onClick={onToggle}
+        onClick={() => setOpen(!open)}
         disabled={disabled}
         aria-expanded={open}
         className="eyebrow w-full flex items-center justify-between gap-3 py-0.5 text-left enabled:hover:text-weak disabled:cursor-default"
@@ -474,21 +492,26 @@ function useWriteGate(v: LiveVault) {
 
 // ───────────────────────── Deposit ─────────────────────────
 
-function DepositForm({ ctx, route, initialAmount }: { ctx: FormContext; route: ZapRoute | undefined; initialAmount?: string }) {
+function DepositForm({ ctx, routes, routePending, initialAmount }: { ctx: FormContext; routes: ZapRoute[]; routePending: boolean; initialAmount?: string }) {
   // USDG only by default. Until the chain confirms the route, the zap form's shape shows with nothing
-  // to type into, so no amount is lost and nothing moves when it lands.
+  // to type into, so no amount is lost and nothing moves when it lands. Once the probe settles with no
+  // route (a basket without USDG, a vault the zap does not register, a failed probe) the card is in kind.
   const [mode, setMode] = useState<Mode>('zap');
+  // The pay-with token, by address: it survives the candidate list re-forming on a poll; the default (USDG) leads it
+  const [picked, setPicked] = useState<Address | null>(null);
+  const route = routes.find((r) => r.token.address === picked) ?? routes[0];
+  const active: Mode = !route && !routePending ? 'basket' : mode;
   const options = modeOptions(ctx, route, true);
   // On the zap the label names it, and what it does is on hover; in kind it is plain "Pay with"
-  const label = mode === 'zap' ? <Hint tip={ZAP_EXPLAINER} align="start" wide>Zap in</Hint> : 'Pay with';
+  const label = active === 'zap' ? <Hint tip={ZAP_EXPLAINER} align="start" wide>Zap in</Hint> : 'Pay with';
   const choice = (
     <Field label={label}>
-      <TokenChoice options={options} value={mode} onChange={setMode} />
+      <TokenChoice options={options} value={active} onChange={setMode} />
     </Field>
   );
-  if (mode === 'basket') return <BasketDepositForm key="basket" ctx={ctx} choice={choice} />;
+  if (active === 'basket') return <BasketDepositForm key="basket" ctx={ctx} choice={choice} />;
   return route ? (
-    <ZapDepositForm key="zap" ctx={ctx} routes={[route]} choice={choice} initialAmount={initialAmount} />
+    <ZapDepositForm key="zap" ctx={ctx} routes={routes} route={route} onPick={(r) => setPicked(r.token.address)} choice={choice} initialAmount={initialAmount} />
   ) : (
     <ZapPendingForm key="zap-pending" ctx={ctx} choice={choice} />
   );
@@ -498,8 +521,12 @@ function DepositForm({ ctx, route, initialAmount }: { ctx: FormContext; route: Z
 const ZAP_EXPLAINER =
   'The zap buys the other basket tokens on the route pool (TWAP-guarded), then makes the normal in-kind deposit — the vault itself never swaps. Leftovers come back to your wallet.';
 
-/** The zap deposit form's shape while the chain confirms the route: nothing to type into or press yet. */
+/**
+ * The zap deposit form's shape while the chain confirms the route: nothing to type into or press yet. The token
+ * is the basket's USDG under its on-chain symbol; until the basket is read the box carries no token at all.
+ */
 function ZapPendingForm({ ctx: { vault: v }, choice }: { ctx: FormContext; choice: ReactNode }) {
+  const symbol = zapAnchor(v)?.symbol;
   return (
     <div className="grid gap-4">
       {choice}
@@ -508,23 +535,23 @@ function ZapPendingForm({ ctx: { vault: v }, choice }: { ctx: FormContext; choic
         <AmountBox
           value=""
           onChange={() => {}}
-          tokenLabel={ZAP_ROUTE_SYMBOL}
-          tokenIcon={<TokenIcon symbol={ZAP_ROUTE_SYMBOL} size={20} />}
+          tokenLabel={symbol ?? ''}
+          tokenIcon={symbol && <TokenIcon symbol={symbol} size={20} />}
           decimals={0}
           connected={false}
           disabled
-          ariaLabel={`${ZAP_ROUTE_SYMBOL} amount`}
+          ariaLabel={symbol ? `${symbol} amount` : 'Amount'}
         />
       </Field>
 
       <YouReceive decimals={v.decimals} symbol={v.receipt.symbol} />
 
       <Button block variant="accent" disabled loading>
-        Checking the {ZAP_ROUTE_SYMBOL} route…
+        {symbol ? `Checking the ${symbol} route…` : 'Checking the route…'}
       </Button>
 
       <div className="text-xs num">
-        <DetailsFold open={false} onToggle={() => {}} disabled />
+        <DetailsFold disabled />
       </div>
     </div>
   );
@@ -542,7 +569,6 @@ function BasketDepositForm({ ctx, choice }: { ctx: FormContext; choice: ReactNod
   const [pendingToken, setPendingToken] = useState<Address | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [minted, setMinted] = useState<bigint | null>(null);
-  const [details, setDetails] = useState(false);
 
   const offer = useMemo(
     () => dispatchBasket(v.tokens.map((t, i) => ({ token: t.address, decimals: t.decimals, input: inputs[t.address] ?? '', total: v.totals[i] ?? 0n }))),
@@ -554,7 +580,16 @@ function BasketDepositForm({ ctx, choice }: { ctx: FormContext; choice: ReactNod
   const minShares = minSharesFromPreview(preview.shares ?? 0n, bps);
   const required = preview.required ?? [];
   const needsApproval = tokensNeedingApproval(offer.tokens, required, user.allowances);
-  const short = insufficientBalance(offer.tokens, required, user.balances);
+  // One rule for the red edge and the button: a field is short when its TYPED amount exceeds the wallet, or
+  // when what the vault would PULL does (the preview) — the button names the first short field, the edges all of them
+  const typedOver = (i: number) => {
+    const parsed = parseAmount(inputs[v.tokens[i].address] ?? '', v.tokens[i].decimals);
+    return Boolean(address) && parsed.ok && parsed.value > (user.balances[i] ?? 0n);
+  };
+  const pulledShort = insufficientBalance(offer.tokens, required, user.balances);
+  const isShort = (i: number) => typedOver(i) || pulledShort === v.tokens[i].address;
+  const shortAt = basketOrderIndices(v.tokens).find(isShort);
+  const short = shortAt === undefined ? null : v.tokens[shortAt].address;
   const errCtx = errorContext(v);
   const symbolOf = (a: Address) => v.tokens.find((t) => t.address === a)?.symbol ?? 'token';
   const busy = step !== 'form';
@@ -631,9 +666,9 @@ function BasketDepositForm({ ctx, choice }: { ctx: FormContext; choice: ReactNod
   if (gate) cta = gate;
   else if (Object.keys(offer.errors).length > 0) cta = idle('Fix the amounts');
   else if (offer.hasMissingAmount) cta = idle(v.tokens.length > 1 ? 'Enter an amount for every token' : 'Enter an amount');
+  else if (short) cta = idle(`Insufficient ${symbolOf(short)}`);
   else if (preview.error) cta = idle('Deposit not possible');
   else if (preview.shares === undefined) cta = idle('Previewing…');
-  else if (short) cta = idle(`Insufficient ${symbolOf(short)}`);
   else if (!slip.ok) cta = idle('Fix the slippage tolerance');
   else if (needsApproval.length > 0) cta = { label: `Approve ${symbolOf(needsApproval[0])}`, disabled: false, onClick: () => void approveNext() };
   else cta = { label: v.tokens.length > 1 ? `Deposit ${v.tokens.length} tokens` : 'Deposit', disabled: false, onClick: () => void submit() };
@@ -647,25 +682,25 @@ function BasketDepositForm({ ctx, choice }: { ctx: FormContext; choice: ReactNod
 
       <Field label={<Hint tip={MIX_EXPLAINER} align="start" wide>Amount</Hint>}>
         <div className="space-y-2">
-          {v.tokens.map((t, i) => {
+          {basketOrderIndices(v.tokens).map((i, pos) => {
+            const t = v.tokens[i];
             const parsed = parseAmount(inputs[t.address] ?? '', t.decimals);
             const price = usdPrices.get(t.address.toLowerCase());
             const balance = user.balances[i] ?? 0n;
-            // Red as soon as a field asks for more than the wallet holds, before the preview lands
-            const over = Boolean(address) && parsed.ok && parsed.value > balance;
             return (
               <AmountBox
                 key={t.address}
                 value={inputs[t.address] ?? ''}
-                onChange={(s) => { setInputs((x) => fillAtMix(v.tokens, v.totals, x, i, s)); setMinted(null); }}
+                onChange={(s) => { setInputs((x) => fillAtMix(v.tokens, v.totals, x, i, s, address ? user.balances : undefined)); setMinted(null); }}
                 tokenLabel={t.symbol}
                 tokenIcon={<TokenIcon symbol={t.symbol} size={20} />}
                 balance={balance}
                 decimals={t.decimals}
                 connected={Boolean(address)}
                 usd={parsed.ok && price !== undefined ? whole(parsed.value, t.decimals) * price : undefined}
-                autoFocus={i === 0}
-                error={offer.errors[t.address] ?? (over || short === t.address ? true : undefined)}
+                autoFocus={pos === 0}
+                // Red as soon as a field asks for more than the wallet holds, before the preview lands
+                error={offer.errors[t.address] ?? (isShort(i) ? true : undefined)}
                 ariaLabel={`${t.symbol} amount`}
               />
             );
@@ -685,7 +720,7 @@ function BasketDepositForm({ ctx, choice }: { ctx: FormContext; choice: ReactNod
       {footer}
 
       <div className="text-xs num">
-        <DetailsFold open={details} onToggle={() => setDetails(!details)}>
+        <DetailsFold>
           {priceRow(nav, v.receipt.symbol)}
           <Row k="Slippage tolerance" v={<PercentInput value={slippage} onChange={setSlippage} error={!slip.ok} ariaLabel="Slippage tolerance in percent" />} />
           <Row k="Minimum received" v={slip.ok ? `${formatAmountSignificant(minShares, v.decimals)} ${v.receipt.symbol}` : <span className="text-error">{slip.error}</span>} />
@@ -698,13 +733,12 @@ function BasketDepositForm({ ctx, choice }: { ctx: FormContext; choice: ReactNod
   );
 }
 
-function ZapDepositForm({ ctx, routes, choice, initialAmount }: { ctx: FormContext; routes: ZapRoute[]; choice: ReactNode; initialAmount?: string }) {
+function ZapDepositForm({ ctx, routes, route, onPick, choice, initialAmount }: { ctx: FormContext; routes: ZapRoute[]; route: ZapRoute; onPick: (r: ZapRoute) => void; choice: ReactNode; initialAmount?: string }) {
   const { vault: v, user, usdPrices, nav } = ctx;
   const { write } = useWallet();
   const pushToast = useStore((s) => s.pushToast);
   const { address, gate, loading, footer } = useWriteGate(v);
-  const [picked, setPicked] = useState(0);
-  const route = routes[picked] ?? routes[0];
+  const picked = Math.max(routes.indexOf(route), 0);
   const token = route.token;
 
   const [value, setValue] = useState(initialAmount ?? '');
@@ -712,20 +746,21 @@ function ZapDepositForm({ ctx, routes, choice, initialAmount }: { ctx: FormConte
   const [step, setStep] = useState<'form' | 'approving' | 'zapping'>('form');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ shares: bigint; refunded: bigint } | null>(null);
-  const [details, setDetails] = useState(false);
 
-  const parsed = parseZapDepositAmount(value, token.decimals, token.symbol);
+  // The ≈ $ price the box shows also sizes the dust floor and the size warning (whole tokens without one)
+  const price = usdPrices.get(token.address.toLowerCase());
+  const parsed = parseZapDepositAmount(value, token.decimals, token.symbol, price);
   const amountIn = parsed?.ok ? parsed.value : 0n;
   const slip = parseZapSlippage(slippage);
   const bps = slip.ok ? slip.bps : ZAP_DEFAULT_SLIPPAGE_BPS;
-  const legBps = zapLegSlippageBps(bps, route.routeFeeBps);
+  const legBps = ZAP_LEG_SLIPPAGE_BPS;
   const preview = usePreviewZap(v, route.zap, token.address, amountIn, legBps, parsed?.ok === true && slip.ok);
   const minShares = zapMinimum(preview.shares ?? 0n, bps);
   const { allowance, refetch: refetchAllowance } = useZapAllowance(v, token.address, address ?? undefined, route.zap);
   const balance = user.balances[route.index] ?? 0n;
   const needsApproval = tokensNeedingApproval([token.address], [amountIn], [allowance]).length > 0;
   const short = insufficientBalance([token.address], [amountIn], [balance]);
-  const sizeWarning = zapSizeWarning(amountIn, token.decimals, token.symbol);
+  const sizeWarning = zapSizeWarning(amountIn, token.decimals, token.symbol, price);
   const errCtx = errorContext(v, route);
   const busy = step !== 'form';
 
@@ -803,15 +838,10 @@ function ZapDepositForm({ ctx, routes, choice, initialAmount }: { ctx: FormConte
   else if (needsApproval) cta = { label: `Approve ${token.symbol} for the zap`, disabled: false, onClick: () => void approve() };
   else cta = { label: `Deposit ${formatAmount(amountIn, token.decimals, 6)} ${token.symbol}`, disabled: false, onClick: () => void submit() };
 
-  const price = usdPrices.get(token.address.toLowerCase());
   const sharesUsd = preview.shares !== undefined && nav !== undefined ? whole(preview.shares, v.decimals) * nav : undefined;
   const kept = preview.offers?.[route.index];
   const bought = v.tokens.map((t, i) => ({ t, amount: preview.offers?.[i] ?? 0n, i })).filter((x) => x.i !== route.index && x.amount > 0n);
   const previewError = preview.error ? describeZapError(preview.error, errCtx) : null;
-  // The tolerance does not clear a route pool's fee, so the legs go at the routes' own caps (zapLegSlippageBps)
-  const legNote = slip.ok && slip.bps > 0 && legBps === 0
-    ? `One swap pool charges a ${route.routeFeeBps / 100}% fee, more than this tolerance allows, so that swap uses the route’s own preset limit. The minimum you receive still follows your tolerance.`
-    : undefined;
 
   return (
     <div className="grid gap-4">
@@ -827,7 +857,7 @@ function ZapDepositForm({ ctx, routes, choice, initialAmount }: { ctx: FormConte
               tokens={routes.map((r) => r.token)}
               balances={routes.map((r) => user.balances[r.index] ?? 0n)}
               value={picked}
-              onChange={(i) => { if (i !== picked) { setPicked(i); setValue(''); setResult(null); setError(null); } }}
+              onChange={(i) => { if (i !== picked) { onPick(routes[i]); setValue(''); setResult(null); setError(null); } }}
               connected={Boolean(address)}
             />
           }
@@ -860,7 +890,7 @@ function ZapDepositForm({ ctx, routes, choice, initialAmount }: { ctx: FormConte
       {footer}
 
       <div className="text-xs num">
-        <DetailsFold open={details} onToggle={() => setDetails(!details)}>
+        <DetailsFold>
           {priceRow(nav, v.receipt.symbol)}
           {kept !== undefined && bought.length > 0 && (
             <Row k="Auto-swap" v={`${formatAmount(amountIn - kept, token.decimals, 6)} ${token.symbol} → ${bought.map((x) => `${formatAmount(x.amount, x.t.decimals, 6)} ${x.t.symbol}`).join(' + ')}`} />
@@ -870,9 +900,11 @@ function ZapDepositForm({ ctx, routes, choice, initialAmount }: { ctx: FormConte
           <Row k="Performance fee" v={`${feeLabel(v.performanceFeeBps)} of harvested fees`} />
           <Row k="Lock-up" v="None · redeem anytime" />
         </DetailsFold>
-        {slip.ok && slip.clamped && <p className="mt-2 text-2xs text-warning">Capped at the route limit of {ZAP_MAX_SLIPPAGE_BPS / 100}%.</p>}
-        {/* Under the fold, not inside it: it changes what the swap is allowed, so it shows whenever it applies */}
-        {legNote && <p className="mt-2 text-2xs text-weaker">{legNote}</p>}
+        {slip.ok && slip.clamped && <p className="mt-2 text-2xs text-warning">Capped at the maximum of {ZAP_MAX_SLIPPAGE_BPS / 100}%.</p>}
+        {/* Under the fold, not inside it: it says what the swap is allowed, so it always shows */}
+        <p className="mt-2 text-2xs text-weaker">
+          Each swap leg is bounded by its route’s own cap (up to {route.maxLegSlippageBps / 100}% off the TWAP); your tolerance bounds the minimum received.
+        </p>
       </div>
     </div>
   );
@@ -894,14 +926,14 @@ function WithdrawForm({ ctx, route }: { ctx: FormContext; route: ZapRoute | unde
 
 /** The receipt-token amount box both withdraw facets share. */
 function SharesBox({ ctx, value, onChange, error, connected }: { ctx: FormContext; value: string; onChange: (s: string) => void; error?: string | boolean; connected: boolean }) {
-  const { vault: v, user, nav } = ctx;
+  const { vault: v, symbols, user, nav } = ctx;
   const parsed = parseAmount(value, v.decimals);
   return (
     <AmountBox
       value={value}
       onChange={onChange}
       tokenLabel={v.receipt.symbol}
-      tokenIcon={<TokenGroup symbols={basketOrder(v.tokens.map((t) => t.symbol))} size={18} />}
+      tokenIcon={<TokenGroup symbols={symbols} size={18} />}
       balance={user.shares}
       decimals={v.decimals}
       connected={connected}
@@ -977,7 +1009,7 @@ function BasketWithdrawForm({ ctx, choice }: { ctx: FormContext; choice: ReactNo
       <Field label="Receive">
         <div className="grid gap-2 border-t border-stroke-strong pt-3 num">
           <div className="display num text-2xl text-strong">
-            {owed ? v.tokens.map((t, i) => `${formatAmount(owed[i] ?? 0n, t.decimals, 6)} ${t.symbol}`).join(' + ') : <span className="text-weaker">0</span>}
+            {owed ? basketOrderIndices(v.tokens).map((i) => `${formatAmount(owed[i] ?? 0n, v.tokens[i].decimals, 6)} ${v.tokens[i].symbol}`).join(' + ') : <span className="text-weaker">0</span>}
           </div>
           <div className="text-xs text-weaker">{owed && owedUsd !== undefined ? `≈ ${fmtUsd(owedUsd, { compact: false, cents: true })} at spot · no withdrawal fee` : 'No lock-up. Redeem anytime, in kind.'}</div>
         </div>
@@ -985,7 +1017,7 @@ function BasketWithdrawForm({ ctx, choice }: { ctx: FormContext; choice: ReactNo
       {preview.error && <Message tone="warn">{describeChainError(preview.error, errCtx)}</Message>}
       {error && <Message tone="error">{error}</Message>}
       {received && (
-        <Message tone="ok">Withdrawn. {v.tokens.map((t, i) => `${formatAmount(received[i] ?? 0n, t.decimals, 6)} ${t.symbol}`).join(' + ')} sent to your wallet.</Message>
+        <Message tone="ok">Withdrawn. {basketOrderIndices(v.tokens).map((i) => `${formatAmount(received[i] ?? 0n, v.tokens[i].decimals, 6)} ${v.tokens[i].symbol}`).join(' + ')} sent to your wallet.</Message>
       )}
       <Button block variant="secondary" onClick={cta.onClick} disabled={cta.disabled || busy} loading={busy || loading}>
         {busy ? 'Withdrawing…' : cta.label}
@@ -1007,13 +1039,12 @@ function ZapWithdrawForm({ ctx, route, choice }: { ctx: FormContext; route: ZapR
   const [step, setStep] = useState<'form' | 'approving' | 'redeeming'>('form');
   const [error, setError] = useState<string | null>(null);
   const [received, setReceived] = useState<bigint | null>(null);
-  const [details, setDetails] = useState(false);
 
   const parsed = parseZapRedeemShares(value, v.decimals, user.shares);
   const shares = parsed?.ok ? parsed.value : 0n;
   const slip = parseZapSlippage(slippage);
   const bps = slip.ok ? slip.bps : ZAP_DEFAULT_SLIPPAGE_BPS;
-  const legBps = zapLegSlippageBps(bps, route.routeFeeBps);
+  const legBps = ZAP_LEG_SLIPPAGE_BPS;
   const preview = usePreviewZapRedeem(v, route.zap, token.address, shares, legBps, parsed?.ok === true && slip.ok);
   const minOut = zapMinimum(preview.amountOut ?? 0n, bps);
   const { allowance, refetch: refetchAllowance } = useZapAllowance(v, v.address, address ?? undefined, route.zap);
@@ -1118,11 +1149,11 @@ function ZapWithdrawForm({ ctx, route, choice }: { ctx: FormContext; route: ZapR
       </Button>
       {footer}
       <div className="text-xs num">
-        <DetailsFold open={details} onToggle={() => setDetails(!details)}>
+        <DetailsFold>
           <Row k="Slippage tolerance" v={<PercentInput value={slippage} onChange={setSlippage} error={!slip.ok} ariaLabel="Zap withdraw slippage tolerance in percent" />} />
           <Row k="Minimum received" v={slip.ok ? `${formatAmount(minOut, token.decimals, 6)} ${token.symbol}` : <span className="text-error">{slip.error}</span>} />
         </DetailsFold>
-        {slip.ok && slip.clamped && <p className="mt-2 text-2xs text-warning">Capped at the route limit of {ZAP_MAX_SLIPPAGE_BPS / 100}%.</p>}
+        {slip.ok && slip.clamped && <p className="mt-2 text-2xs text-warning">Capped at the maximum of {ZAP_MAX_SLIPPAGE_BPS / 100}%.</p>}
       </div>
     </div>
   );
@@ -1135,8 +1166,9 @@ function ZapWithdrawForm({ ctx, route, choice }: { ctx: FormContext; route: ZapR
  */
 export function VaultDepositCard({ row, spots, initialAmount, showVaultLink }: { row: LiveVaultRow; spots: ChainSpots; initialAmount?: string; showVaultLink?: boolean }) {
   const { address } = useWallet();
-  const vault = useLiveVaultAt(row.v.chainId, row.v.entry);
+  // Seeded from the row Markets already read, so the overlay opens on the basket instead of re-reading it
+  const vault = useLiveVaultAt(row.v.chainId, row.v.entry, row.v);
   const user = useUserBasket(address ?? undefined, vault);
   const usdPrices = useMemo(() => tokenUsdPrices(row.v.tokens, spots.spots), [row.v.tokens, spots.spots]);
-  return <DepositCard vault={vault} user={user} usdPrices={usdPrices} nav={row.nav} initialAmount={initialAmount} showVaultLink={showVaultLink} symbols={row.v.ready ? row.v.tokens.map((t) => t.symbol) : undefined} />;
+  return <DepositCard vault={vault} user={user} usdPrices={usdPrices} nav={row.nav} initialAmount={initialAmount} showVaultLink={showVaultLink} />;
 }

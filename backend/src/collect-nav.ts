@@ -84,7 +84,7 @@ const v3PoolAbi = parseAbi([
   'function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)',
 ]);
 const adapterFeesAbi = parseAbi([
-  'function fees() view returns (uint256 fees0, uint256 fees1)',
+  'function fees() view returns (address[] tokens, uint256[] amounts)',
   'function TOKEN0() view returns (address)',
   'function TOKEN1() view returns (address)',
 ]);
@@ -282,8 +282,6 @@ async function snapshotVault(r: ChainReaders, v: VaultEntry): Promise<SnapshotRo
         adapters.map((a) =>
           Promise.all([
             r.client.readContract({ address: a, abi: adapterFeesAbi, functionName: 'fees' }),
-            r.client.readContract({ address: a, abi: adapterFeesAbi, functionName: 'TOKEN0' }),
-            r.client.readContract({ address: a, abi: adapterFeesAbi, functionName: 'TOKEN1' }),
           ]).then(
             (r2) => ({ ok: true as const, value: r2 }),
             () => ({ ok: false as const, value: undefined }),
@@ -293,11 +291,18 @@ async function snapshotVault(r: ChainReaders, v: VaultEntry): Promise<SnapshotRo
       for (let i = 0; i < adapters.length; i++) {
         const f = feeResults[i]?.ok === true ? feeResults[i]?.value : undefined;
         if (!f) continue; // adapter without the fees view contributes nothing
-        const [f0, f1] = f[0] as readonly [bigint, bigint];
-        const t0 = f[1] as Address;
-        const t1 = f[2] as Address;
-        if (t0) feeRaw.set(t0.toLowerCase(), (feeRaw.get(t0.toLowerCase()) ?? 0n) + f0);
-        if (t1) feeRaw.set(t1.toLowerCase(), (feeRaw.get(t1.toLowerCase()) ?? 0n) + f1);
+        // fees() = (address[] tokens, uint256[] amounts): the GROSS fee part per token,
+        // index-aligned with position() — bucket each amount under ITS OWN returned token
+        // (never the venue pair; the returned addresses are the accounting they belong to).
+        const feeToks = f[0][0] as readonly Address[];
+        const feeAmts = f[0][1] as readonly bigint[];
+        if (feeToks.length !== feeAmts.length) throw new Error('adapter fees() misaligned arrays');
+        for (let j = 0; j < feeToks.length; j++) {
+          const tokAddr = String(feeToks[j] ?? '').toLowerCase();
+          if (tokAddr && tokAddr !== '0x0000000000000000000000000000000000000000') {
+            feeRaw.set(tokAddr, (feeRaw.get(tokAddr) ?? 0n) + (feeAmts[j] ?? 0n));
+          }
+        }
       }
     }
 

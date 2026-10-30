@@ -20,5 +20,8 @@ frontend/public/wallet-rpc.json
 .env.*
 !.env.example
 .gstack/
-data/
+# runtime data only — frontend/src/demo/data is tracked source, don't blanket-ignore `data/`
 backend/data/
+
+# worktrees are nested repos — never track
+.claude/worktrees/

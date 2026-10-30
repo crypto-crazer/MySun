@@ -30,12 +30,10 @@ export function publicClientFor(chainId: number): Client<Transport, Chain> {
     // than 3 requests on its free tier (JSON-RPC error 31), which turned page renders into "RPC did
     // not answer". Capping batches at 3 keeps calls grouped without tripping it; the local chain just
     // gets a few more same-origin requests, which costs nothing.
-    const apiKey = import.meta.env.VITE_DRPC_API_KEY as string | undefined;
     client = createClient({
       chain,
       transport: http(chain.rpcUrls.default.http[0], {
         batch: { batchSize: 3 },
-        fetchOptions: apiKey ? { headers: { 'x-api-key': apiKey } } : undefined,
       }),
     });
     clients.set(chainId, client);

@@ -243,7 +243,7 @@ function DataBadgesSection() {
   );
 }
 
-const TOKENS = ['ETH', 'USDG', 'NVDA', 'SPCX', 'SPY', 'PONS', 'CASHCAT'];
+const TOKENS = ['ETH', 'USDG', 'NVDA', 'SPCX', 'SPY', 'PONS'];
 
 function TokenIconSection() {
   return (
