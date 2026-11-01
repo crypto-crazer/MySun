@@ -155,6 +155,8 @@ interface IPoolmigoVault {
 
     /// @notice Keeper: swap `p.amountIn` of the vault's idle through a registered {ISwapAdapter} (`CAP_SWAP`); the
     ///         output lands back in the vault (approval reset to 0, `amountOut >= p.minAmountOut` re-checked here).
+    ///         The adapter's `tokenIn` balance must not fall across the call (`PoolmigoVault__InexactDelivery`): a
+    ///         short delivery must not spend the adapter's idle or v4 banked fees.
     function swapExactIn(IPositionAdapter adapter, ISwapAdapter.SwapParams calldata p) external;
 
     /// @notice Keeper: exact add on a registered {ILiquidityAdapter} (caps approved, then reset to 0).

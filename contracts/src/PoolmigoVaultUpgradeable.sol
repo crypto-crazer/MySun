@@ -488,8 +488,11 @@ contract PoolmigoVaultUpgradeable is
      *      (`PoolmigoVault__DuplicateToken`). Approves exactly `amountIn`, lets the adapter pull it, resets the
      *      approval to 0. The adapter swaps through its own guarded venue path (its TWAP floor or `p.minAmountOut`,
      *      whichever is stricter) and returns the whole output here; the returned amount is re-checked against
-     *      `p.minAmountOut` (`PoolmigoVault__InsufficientAmountOut`). Value moves between basket tokens only; no fee,
-     *      no storage change.
+     *      `p.minAmountOut` (`PoolmigoVault__InsufficientAmountOut`). The adapter's `tokenIn` balance must not fall:
+     *      adapters pull `amountIn` and then pay that same nominal amount into the executor, so a short delivery
+     *      (fee-on-transfer) would spend idle and, on v4, banked fees. Exact tokens finish at the balance they
+     *      started with. A decrease reverts `PoolmigoVault__InexactDelivery` and undoes the swap. One check here
+     *      covers every adapter. Value moves between basket tokens only; no fee, no storage change.
      * @param adapter Registered position implementing {ISwapAdapter}.
      * @param p Token pair (the adapter's), exact input, output floor.
      */
@@ -511,9 +514,19 @@ contract PoolmigoVaultUpgradeable is
             revert PoolmigoVault__DuplicateToken(tokenIn);
         }
 
+        // Adapters pull `amountIn` from the vault, then the executor pulls that same nominal amount from the
+        // adapter. A fee-on-transfer token arrives short, and the executor's pull spends idle / v4 banked fees
+        // (both are this token's balance). Exact tokens net to zero on `tokenIn` — the output is the other token.
+        // Reverting undoes the swap, so the decrease never settles. Checked once, for every adapter.
+        uint256 reservedBefore = IERC20(tokenIn).balanceOf(address(adapter));
         IERC20(tokenIn).forceApprove(address(adapter), amountIn);
         uint256 amountOut = ISwapAdapter(address(adapter)).swapExactIn(p);
         IERC20(tokenIn).forceApprove(address(adapter), 0);
+        uint256 reservedAfter = IERC20(tokenIn).balanceOf(address(adapter));
+        if (reservedAfter < reservedBefore) {
+            uint256 drained = reservedBefore - reservedAfter;
+            revert PoolmigoVault__InexactDelivery(tokenIn, amountIn, drained >= amountIn ? 0 : amountIn - drained);
+        }
         if (amountOut < p.minAmountOut) {
             revert PoolmigoVault__InsufficientAmountOut(p.minAmountOut, amountOut);
         }
