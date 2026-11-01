@@ -2,17 +2,24 @@
 pragma solidity ^0.8.34;
 
 import {Test} from "forge-std/Test.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {
+    ReentrancyGuardTransientUpgradeable
+} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardTransientUpgradeable.sol";
 
 import {MySunVaultUpgradeable} from "contracts/MySunVaultUpgradeable.sol";
 import {MySunVaultUpgradeExample} from "contracts/MySunVaultUpgradeExample.sol";
 import {IPoolmigoVault} from "contracts/interfaces/IPoolmigoVault.sol";
 import {IPositionAdapter} from "contracts/interfaces/IPositionAdapter.sol";
+import {ISwapAdapter} from "contracts/interfaces/ISwapAdapter.sol";
+import {ILiquidityAdapter} from "contracts/interfaces/ILiquidityAdapter.sol";
 import {MockToken} from "test/mocks/MockToken.sol";
 import {VaultImplArgs} from "test/utils/VaultImplArgs.sol";
 
@@ -117,8 +124,10 @@ contract CriticalPathGapsTest is Test {
                               REENTRANCY
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev A basket token that calls back into deposit / redeem / rebalance from its own transfer.
-    ///      The transient guard rejects every callback; the outer deposit and the later redeem still settle.
+    /// @dev A basket token that calls back into redeem / deposit / rebalance / swapExactIn from its own transfer.
+    ///      The attacker (the token itself) holds shares, a balance with approval, and the keeper role, so each
+    ///      nested call would otherwise be valid. Every one must revert with exactly
+    ///      `ReentrancyGuardReentrantCall`; the outer deposit and the later redeem still settle.
     function test_Reentrancy_DepositAndRedeemCallbacksCannotReenter() public {
         ReenteringToken token = new ReenteringToken();
         address[] memory basket = new address[](1);
@@ -127,16 +136,24 @@ contract CriticalPathGapsTest is Test {
         address owner = makeAddr("owner");
         address bob = makeAddr("bob");
         MySunVaultUpgradeable vault = _vault(basket, owner, makeAddr("treasury"), 100e18, FEE_BPS);
-        token.arm(address(vault));
 
         token.mint(owner, 100e18);
         vm.startPrank(owner);
         token.approve(address(vault), type(uint256).max);
-        // Genesis pull fires the hook too. Arm after, so this seed is quiet.
-        token.disarm();
+        // Hook is not armed yet, so the genesis pull is quiet.
         vault.deposit(basket, _one(100e18), 100e18, owner);
-        vault.setKeeper(owner, true);
+        vault.setKeeper(address(token), true);
+        // The attacker needs shares to redeem, and its own balance + allowance to deposit.
+        IERC20(address(vault)).transfer(address(token), 1e18);
         vm.stopPrank();
+        token.mint(address(token), 10e18);
+        token.approveVault(address(vault));
+
+        // Each nested call is valid on its own terms, so only the guard can stop it.
+        assertEq(vault.balanceOf(address(token)), 1e18, "attacker has shares");
+        assertEq(token.allowance(address(token), address(vault)), type(uint256).max, "attacker approved the vault");
+        assertGe(token.balanceOf(address(token)), 10e18, "attacker has a balance");
+        assertTrue(vault.isKeeper(address(token)), "attacker is a keeper");
 
         token.mint(bob, 100e18);
         vm.prank(bob);
@@ -146,19 +163,29 @@ contract CriticalPathGapsTest is Test {
         vm.prank(bob);
         uint256 minted = vault.deposit(basket, _one(100e18), 1, bob);
 
-        assertFalse(token.redeemEntered(), "deposit callback could not redeem");
-        assertFalse(token.depositEntered(), "deposit callback could not re-enter deposit");
-        assertFalse(token.rebalanceEntered(), "deposit callback could not rebalance");
-        assertEq(minted, 100e18);
-        assertEq(vault.balanceOf(bob), 100e18);
-        assertEq(vault.balanceOf(owner), 100e18, "owner shares untouched");
+        _assertAllBlockedByGuard(token);
+        assertEq(minted, 100e18, "outer deposit still settles at par");
+        assertEq(vault.balanceOf(bob), minted);
+        assertEq(vault.balanceOf(owner), 99e18, "owner shares untouched");
+        assertEq(vault.balanceOf(address(token)), 1e18, "attacker shares untouched");
 
         token.arm(address(vault));
         vm.prank(bob);
-        vault.redeem(100e18, bob);
-        assertFalse(token.depositEntered(), "redeem payout could not deposit");
+        vault.redeem(minted, bob);
+        _assertAllBlockedByGuard(token);
         assertEq(vault.balanceOf(bob), 0);
-        assertEq(token.balanceOf(bob), 100e18, "bob got his principal back");
+        assertGt(token.balanceOf(bob), 0, "bob was paid out");
+    }
+
+    function _assertAllBlockedByGuard(ReenteringToken token) internal view {
+        assertEq(token.fires(), 1, "hook fired exactly once");
+        bytes memory guard =
+            abi.encodeWithSelector(ReentrancyGuardTransientUpgradeable.ReentrancyGuardReentrantCall.selector);
+        for (uint256 i; i < 4; ++i) {
+            ReenteringToken.Call c = ReenteringToken.Call(i);
+            assertFalse(token.entered(c), "callback got in");
+            assertEq(token.revertData(c), guard, "callback must fail on the reentrancy guard, not something else");
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -203,6 +230,11 @@ contract CriticalPathGapsTest is Test {
         vm.prank(owner);
         vault.upgradeToAndCall(address(next), "");
 
+        assertEq(
+            address(uint160(uint256(vm.load(address(vault), ERC1967Utils.IMPLEMENTATION_SLOT)))),
+            address(next),
+            "ERC-1967 implementation slot points at the new implementation"
+        );
         assertTrue(vault.paused(), "pause survives the upgrade");
         assertEq(vault.totalSupply(), supplyBefore);
         assertEq(vault.owner(), owner);
@@ -229,6 +261,12 @@ contract CriticalPathGapsTest is Test {
         vault.deployTo(adapter, _one(1));
         vm.expectRevert(IPoolmigoVault.PoolmigoVault__NotKeeper.selector);
         vault.pullFrom(adapter, 1);
+        vm.expectRevert(IPoolmigoVault.PoolmigoVault__NotKeeper.selector);
+        vault.addLiquidity(adapter, ILiquidityAdapter.AddLiquidityParams(-60, 60, 1, 0, 1, 1, 0));
+        vm.expectRevert(IPoolmigoVault.PoolmigoVault__NotKeeper.selector);
+        vault.removeLiquidity(adapter, ILiquidityAdapter.RemoveLiquidityParams(1, 0, 0));
+        vm.expectRevert(IPoolmigoVault.PoolmigoVault__NotKeeper.selector);
+        vault.swapExactIn(adapter, ISwapAdapter.SwapParams(address(token), address(0xCAFE), 1, 0));
         vm.expectRevert(IPoolmigoVault.PoolmigoVault__NotRiskManager.selector);
         vault.pause();
         vm.expectRevert(IPoolmigoVault.PoolmigoVault__NotRiskManager.selector);
@@ -240,7 +278,12 @@ contract CriticalPathGapsTest is Test {
                           KNOWN-ISSUE DEMONSTRATIONS
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Known issue: `redeem` skims whatever the adapter reports as fees, and does not check
+    /// @dev KNOWN ISSUE: over-reported adapter fees (fees[i] > amounts[i] unchecked in `redeem`).
+    ///      THIS TEST PINS CURRENT BUGGY BEHAVIOUR AS EXPECTED. Once `redeem` validates the adapter's fee
+    ///      report, flip the assertions below: the phantom case should revert (or pay no cut) and the
+    ///      brick case should revert with a typed fee-report error instead of `ERC20InsufficientBalance`.
+    ///
+    ///      `redeem` skims whatever the adapter reports as fees, and does not check
     ///      `fees[i] <= amounts[i]` (the bound {IPositionAdapter} documents). A report of fees with
     ///      no tokens delivered taxes the redeemer's idle; `type(uint256).max` bricks the redeem.
     function test_KnownIssue_OverReportedFeesTaxOrBrickRedeem() public {
@@ -282,13 +325,23 @@ contract CriticalPathGapsTest is Test {
         adapter2.setMode(OverReportingAdapter.Mode.Brick);
         uint256 idleBefore = token.balanceOf(address(vault2));
         vm.prank(owner);
-        vm.expectRevert();
+        // Not an arithmetic panic: the cut (max * 10%) is computed fine, then the treasury transfer
+        // fails on the vault's idle. (The reviewer expected 0x11; the observed revert is this one.)
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IERC20Errors.ERC20InsufficientBalance.selector, address(vault2), idleBefore, type(uint256).max / 10
+            )
+        );
         vault2.redeem(100e18, owner);
         assertEq(token.balanceOf(address(vault2)), idleBefore, "bricked redeem moved nothing");
         assertEq(vault2.totalSupply(), 100e18, "shares unburned");
     }
 
-    /// @dev Known issue: `redeem` takes no per-token minimum. `previewRedeem` is the spot report;
+    /// @dev KNOWN ISSUE: `redeem` has no per-token minimum-out (no slippage protection on exit).
+    ///      THIS TEST PINS CURRENT BUGGY BEHAVIOUR AS EXPECTED. Once `redeem` gains a min-amounts guard
+    ///      (or equivalent), flip it to expect a revert on the 1% delivery.
+    ///
+    ///      `redeem` takes no per-token minimum. `previewRedeem` is the spot report;
     ///      the withdrawal itself can pay a much smaller amount (moved pool, zero mins in the adapter)
     ///      and the transaction still succeeds.
     function test_KnownIssue_RedeemIgnoresDeliveryBelowPreview() public {
@@ -664,13 +717,22 @@ contract SlippageAdapter is IPositionAdapter {
     }
 }
 
-/// @dev On every non-mint transfer, tries to re-enter the vault and records which calls got in.
+/// @dev On every non-mint transfer, tries to re-enter the vault and records, per call, whether it got in and the
+///      raw revert data. The test funds this contract (shares, balance, allowance, keeper role) so the only thing
+///      standing in the way of each callback is the reentrancy guard.
 contract ReenteringToken is ERC20 {
+    enum Call {
+        Redeem,
+        Deposit,
+        Rebalance,
+        SwapExactIn
+    }
+
     address public vault;
     bool public armed;
-    bool public redeemEntered;
-    bool public depositEntered;
-    bool public rebalanceEntered;
+    uint256 public fires;
+    mapping(Call => bool) public entered;
+    mapping(Call => bytes) public revertData;
 
     constructor() ERC20("Reenter", "RE") {}
 
@@ -678,35 +740,48 @@ contract ReenteringToken is ERC20 {
         _mint(to, amount);
     }
 
+    function approveVault(address vault_) external {
+        _approve(address(this), vault_, type(uint256).max);
+    }
+
     function arm(address vault_) external {
         vault = vault_;
         armed = true;
-        redeemEntered = false;
-        depositEntered = false;
-        rebalanceEntered = false;
-    }
-
-    function disarm() external {
-        armed = false;
+        fires = 0;
+        for (uint256 i; i < 4; ++i) {
+            delete entered[Call(i)];
+            delete revertData[Call(i)];
+        }
     }
 
     function _update(address from, address to, uint256 value) internal override {
         super._update(from, to, value);
         if (!armed || from == address(0) || to == address(0)) return;
         armed = false;
-        MySunVaultUpgradeable v = MySunVaultUpgradeable(vault);
+        ++fires;
         address[] memory tokens = new address[](1);
         tokens[0] = address(this);
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = 1;
-        try v.redeem(1, address(this)) {
-            redeemEntered = true;
-        } catch {}
-        try v.deposit(tokens, amounts, 1, address(this)) {
-            depositEntered = true;
-        } catch {}
-        try v.rebalance() {
-            rebalanceEntered = true;
-        } catch {}
+
+        // Encode through an instance: `Type.member` does not resolve inherited functions.
+        MySunVaultUpgradeable v = MySunVaultUpgradeable(vault);
+        _try(Call.Redeem, abi.encodeCall(v.redeem, (1, address(this))));
+        _try(Call.Deposit, abi.encodeCall(v.deposit, (tokens, amounts, 1, address(this))));
+        _try(Call.Rebalance, abi.encodeCall(v.rebalance, ()));
+        // The guard runs before any adapter or capability check, so a placeholder adapter is enough.
+        _try(
+            Call.SwapExactIn,
+            abi.encodeCall(
+                v.swapExactIn,
+                (IPositionAdapter(address(0xBEEF)), ISwapAdapter.SwapParams(address(this), address(0xCAFE), 1, 0))
+            )
+        );
+    }
+
+    function _try(Call c, bytes memory data) private {
+        (bool ok, bytes memory ret) = vault.call(data);
+        entered[c] = ok;
+        revertData[c] = ret;
     }
 }
