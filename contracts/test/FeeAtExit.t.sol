@@ -394,6 +394,205 @@ contract FeeAtExitTest is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
+                FEE BOUND: CUT <= WHAT THE CALL DELIVERED
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev An adapter that over-reports its fee split (5x the slice it delivers) is charged on the slice only: 30% of
+    ///      the slice. Uncapped, the cut would be 150% of the slice, paid out of the receiver's own idle slice.
+    function test_FeeBound_Redeem_OverReportCappedAtSlice() public {
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(3000);
+        _deploy(a1, 500e6, 0.5e18);
+        a1.setReportedFeeBps(5 * BPS);
+
+        // Quarter of the supply: idle slice 125e6 / 0.125e18, a1 slice 125e6 / 0.125e18 (reported fees 5x that).
+        uint256[] memory cut = _amts(37.5e6, 0.0375e18);
+        vm.prank(owner);
+        vm.expectEmit(true, false, false, true, address(vault));
+        emit IPoolmigoVault.PerformanceFeeAccrued(treasury, basket, cut);
+        (, uint256[] memory sent) = vault.redeem(GENESIS / 4, bob);
+
+        assertEq(sent[0], 250e6 - cut[0], "idle slice + adapter slice - capped cut");
+        assertEq(sent[1], 0.25e18 - cut[1]);
+        assertEq(usdg.balanceOf(treasury), cut[0]);
+        assertEq(weth.balanceOf(treasury), cut[1]);
+        assertEq(usdg.balanceOf(address(vault)), 375e6, "remaining holders' idle untouched");
+        assertEq(weth.balanceOf(address(vault)), 0.375e18);
+    }
+
+    /// @dev {pullFrom}: a 10x over-report skims 30% of the slice; the vault's prior idle (every holder's) is never cut.
+    function test_FeeBound_PullFrom_OverReportNeverTouchesIdle() public {
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(3000);
+        _deploy(a1, 400e6, 0.4e18);
+        a1.setReportedFeeBps(10 * BPS);
+        uint256[2] memory idleBefore = _bal(address(vault));
+
+        vm.prank(keeper);
+        vault.pullFrom(IPositionAdapter(address(a1)), 2_500); // slice 100e6 / 0.1e18
+
+        assertEq(usdg.balanceOf(treasury), 30e6, "30% of the slice, not of 10x it");
+        assertEq(weth.balanceOf(treasury), 0.03e18);
+        assertEq(usdg.balanceOf(address(vault)), idleBefore[0] + 70e6);
+        assertEq(weth.balanceOf(address(vault)), idleBefore[1] + 0.07e18);
+    }
+
+    /// @dev {emergencyUnwind}: a 4x over-report still completes (clamp, not revert) and skims 30% of what came back.
+    function test_FeeBound_EmergencyUnwind_OverReportStillUnwinds() public {
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(3000);
+        _deploy(a1, 500e6, 0.5e18);
+        a1.setReportedFeeBps(4 * BPS);
+
+        vm.prank(owner);
+        (, uint256[] memory unwound) = vault.emergencyUnwind();
+
+        assertEq(unwound[0], 500e6, "gross");
+        assertTrue(vault.paused());
+        assertEq(usdg.balanceOf(treasury), 150e6, "30% of what came back");
+        assertEq(weth.balanceOf(treasury), 0.15e18);
+        assertEq(usdg.balanceOf(address(vault)), SEED_USDG - 150e6);
+        assertEq(weth.balanceOf(address(vault)), SEED_WETH - 0.15e18);
+    }
+
+    /// @dev {redeem}, any shares / split (honest or up to 10x over-reported) / fee bps: cut = floor(min(Σ fees, Σ slices)
+    ///      × bps) <= the slices, and the receiver always gets at least its own idle slice.
+    function testFuzz_FeeBound_Redeem(uint256 shares, uint256 split1, uint256 split2, uint16 feeBps) public {
+        shares = bound(shares, 1, GENESIS);
+        split1 = bound(split1, 0, 10 * BPS);
+        split2 = bound(split2, 0, 10 * BPS);
+        feeBps = uint16(bound(feeBps, 0, 3000));
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(feeBps);
+        _deploy(a1, 300e6 + 7, 0.3e18 + 3);
+        _deploy(a2, 200e6 + 1, 0.2e18 + 11);
+        a1.simulateFees(_amts(13e6 + 5, 0.01e18 + 9));
+        a1.setReportedFeeBps(split1);
+        a2.setReportedFeeBps(split2);
+
+        uint256 sharesWad = Math.mulDiv(shares, 1e18, GENESIS);
+        uint256[2] memory idleSlice;
+        uint256[2] memory fees;
+        uint256[2] memory gross;
+        for (uint256 i; i < 2; ++i) {
+            idleSlice[i] = Math.mulDiv(shares, _tok(i).balanceOf(address(vault)), GENESIS);
+            (uint256 g1, uint256 f1) = _slice(a1, i, sharesWad, split1);
+            (uint256 g2, uint256 f2) = _slice(a2, i, sharesWad, split2);
+            gross[i] = g1 + g2;
+            fees[i] = f1 + f2;
+        }
+
+        vm.prank(owner);
+        (, uint256[] memory sent) = vault.redeem(shares, bob);
+
+        for (uint256 i; i < 2; ++i) {
+            uint256 cut = Math.mulDiv(Math.min(fees[i], gross[i]), feeBps, BPS);
+            assertEq(_tok(i).balanceOf(treasury), cut, "cut = floor(min(fees, gross) * bps)");
+            assertLe(cut, gross[i], "cut <= adapter slices");
+            assertEq(sent[i], idleSlice[i] + gross[i] - cut, "net = idle + slices - cut");
+            assertGe(sent[i], idleSlice[i], "own idle slice never skimmed");
+        }
+    }
+
+    /// @dev {pullFrom}, any principal / accrued fees / fraction / split (honest or up to 10x) / fee bps: the cut is
+    ///      floor(min(fees, slice) × bps) <= the slice, and the vault's prior idle is never skimmed.
+    function testFuzz_FeeBound_PullFrom(
+        uint256 u,
+        uint256 w,
+        uint256 accrued,
+        uint256 sharesBps,
+        uint256 split,
+        uint16 feeBps
+    ) public {
+        u = bound(u, 1, SEED_USDG);
+        w = bound(w, 1, SEED_WETH);
+        accrued = bound(accrued, 0, 1e30);
+        sharesBps = bound(sharesBps, 1, BPS);
+        split = bound(split, 0, 10 * BPS);
+        feeBps = uint16(bound(feeBps, 0, 3000));
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(feeBps);
+        _deploy(a1, u, w);
+        a1.simulateFees(_amts(accrued, 0));
+        a1.setReportedFeeBps(split);
+        uint256[2] memory idleBefore = _bal(address(vault));
+
+        vm.prank(keeper);
+        (, uint256[] memory gross) = vault.pullFrom(IPositionAdapter(address(a1)), sharesBps);
+
+        for (uint256 i; i < 2; ++i) {
+            uint256 fees = Math.mulDiv(gross[i], split, BPS);
+            uint256 cut = Math.mulDiv(split <= BPS ? fees : gross[i], feeBps, BPS);
+            assertEq(_tok(i).balanceOf(treasury), cut, "honest: floor(fees * bps); over-report: floor(slice * bps)");
+            assertLe(cut, gross[i], "cut <= slice");
+            assertEq(_tok(i).balanceOf(address(vault)), idleBefore[i] + gross[i] - cut, "prior idle never skimmed");
+        }
+    }
+
+    /// @dev {emergencyUnwind}, any principal / accrued fees / split / fee bps: cut <= what came back, prior idle kept.
+    function testFuzz_FeeBound_EmergencyUnwind(uint256 u, uint256 accrued, uint256 split, uint16 feeBps) public {
+        u = bound(u, 1, SEED_USDG);
+        accrued = bound(accrued, 0, 1e30);
+        split = bound(split, 0, 10 * BPS);
+        feeBps = uint16(bound(feeBps, 0, 3000));
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(feeBps);
+        _deploy(a1, u, 0);
+        a1.simulateFees(_amts(accrued, 0));
+        a1.setReportedFeeBps(split);
+
+        vm.prank(owner);
+        (, uint256[] memory gross) = vault.emergencyUnwind();
+
+        uint256 cut = Math.mulDiv(Math.min(Math.mulDiv(gross[0], split, BPS), gross[0]), feeBps, BPS);
+        assertEq(gross[0], u + accrued);
+        assertEq(usdg.balanceOf(treasury), cut);
+        assertLe(cut, gross[0], "cut <= what came back");
+        assertEq(usdg.balanceOf(address(vault)), SEED_USDG + accrued - cut, "prior idle never skimmed");
+    }
+
+    /// @dev {rebalance}: harvested amounts ARE the fees, so the bound holds by construction — cut = floor(h × bps) <= h.
+    function testFuzz_FeeBound_Rebalance(uint256 fu, uint256 fw, uint16 feeBps) public {
+        fu = bound(fu, 0, 1e30);
+        fw = bound(fw, 0, 1e30);
+        feeBps = uint16(bound(feeBps, 0, 3000));
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(feeBps);
+        a1.simulateFees(_amts(fu, fw));
+
+        vm.prank(keeper);
+        (, uint256[] memory harvested, uint256[] memory cut) = vault.rebalance();
+
+        for (uint256 i; i < 2; ++i) {
+            assertEq(harvested[i], i == 0 ? fu : fw);
+            assertEq(cut[i], Math.mulDiv(harvested[i], feeBps, BPS));
+            assertLe(cut[i], harvested[i], "cut <= harvest");
+            assertEq(_tok(i).balanceOf(treasury), cut[i]);
+        }
+    }
+
+    /// @dev {removeLiquidity}: the collected fees are the base, so cut = floor(fees × bps) <= fees for any fee bps and
+    ///      the vault keeps principal + fees − cut (the mock delivers fixed 11 / 12 principal and 13 / 14 fees).
+    function testFuzz_FeeBound_RemoveLiquidity(uint16 feeBps) public {
+        feeBps = uint16(bound(feeBps, 0, 3000));
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(feeBps);
+        la.setRemoveDelivers(true);
+        uint256[2] memory idleBefore = _bal(address(vault));
+
+        vm.prank(keeper);
+        vault.removeLiquidity(IPositionAdapter(address(la)), ILiquidityAdapter.RemoveLiquidityParams(1, 0, 0));
+
+        uint256[2] memory cut = [Math.mulDiv(13, feeBps, BPS), Math.mulDiv(14, feeBps, BPS)];
+        assertLe(cut[0], 13);
+        assertLe(cut[1], 14);
+        assertEq(usdg.balanceOf(treasury), cut[0]);
+        assertEq(weth.balanceOf(treasury), cut[1]);
+        assertEq(usdg.balanceOf(address(vault)), idleBefore[0] + 11 + 13 - cut[0]);
+        assertEq(weth.balanceOf(address(vault)), idleBefore[1] + 12 + 14 - cut[1]);
+    }
+
+    /*//////////////////////////////////////////////////////////////
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
 

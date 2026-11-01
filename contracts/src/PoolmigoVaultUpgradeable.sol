@@ -359,7 +359,7 @@ contract PoolmigoVaultUpgradeable is
         // Adapter slices land in the vault; the perf fee is skimmed on the fees inside them, then all goes out.
         uint256[] memory fees;
         (amounts, fees) = _exitAll(tokens_, sharesWad);
-        uint256[] memory cut = _skimPerformanceFee(tokens_, fees);
+        uint256[] memory cut = _skimPerformanceFee(tokens_, amounts, fees);
         for (uint256 i; i < n; ++i) {
             uint256 out = idleOut[i] + amounts[i] - cut[i];
             amounts[i] = out;
@@ -417,7 +417,7 @@ contract PoolmigoVaultUpgradeable is
 
         uint256[] memory fees;
         (tokens_, amounts, fees) = _withdrawFrom(adapter, sharesBps * WAD_PER_BPS);
-        _skimPerformanceFee(tokens_, fees);
+        _skimPerformanceFee(tokens_, amounts, fees);
 
         emit PulledFrom(msg.sender, address(adapter), sharesBps, tokens_, amounts);
     }
@@ -473,7 +473,7 @@ contract PoolmigoVaultUpgradeable is
             la.removeLiquidity(p);
         uint256[] memory fees = new uint256[](2);
         (fees[0], fees[1]) = (fees0, fees1);
-        _skimPerformanceFee(t, fees);
+        _skimPerformanceFee(t, fees, fees); // the collected fees are themselves the amounts skimmed from
         emit LiquidityRemoved(
             msg.sender, address(adapter), id, p.liquidity, principal0, principal1, fees0, fees1, idle0, idle1
         );
@@ -557,7 +557,7 @@ contract PoolmigoVaultUpgradeable is
 
         tokens_ = $.tokens;
         (harvested,) = _exitAll(tokens_, HARVEST_ALL);
-        fees = _skimPerformanceFee(tokens_, harvested);
+        fees = _skimPerformanceFee(tokens_, harvested, harvested);
 
         emit Rebalanced(msg.sender, tokens_, harvested, fees);
     }
@@ -703,7 +703,7 @@ contract PoolmigoVaultUpgradeable is
         tokens_ = _s().tokens;
         uint256[] memory fees;
         (amounts, fees) = _exitAll(tokens_, UNWIND_ALL);
-        _skimPerformanceFee(tokens_, fees);
+        _skimPerformanceFee(tokens_, amounts, fees);
         emit EmergencyUnwound(msg.sender, tokens_, amounts);
     }
 
@@ -1122,15 +1122,18 @@ contract PoolmigoVaultUpgradeable is
     }
 
     /// @dev The performance-fee skim — the ONE fee policy for every path accrued fees leave a position ({rebalance},
-    ///      {redeem}, {pullFrom}, {removeLiquidity}, {emergencyUnwind}): cut_i = floor(fees_i * performanceFeeBps /
-    ///      10_000), sent in kind to `treasury` (zero cuts skipped); one `PerformanceFeeAccrued` if any cut != 0.
-    ///      `amounts_` are fee amounts already held by the vault, aligned to `tokens_`.
-    function _skimPerformanceFee(address[] memory tokens_, uint256[] memory amounts_)
+    ///      {redeem}, {pullFrom}, {removeLiquidity}, {emergencyUnwind}): cut_i = floor(min(fees_i, gross_i) *
+    ///      performanceFeeBps / 10_000), sent in kind to `treasury` (zero cuts skipped); one `PerformanceFeeAccrued` if
+    ///      any cut != 0. `gross` = what this call brought into the vault, `fees` = the accrued fees inside it, both
+    ///      aligned to `tokens_`. Invariant cut_i <= gross_i: adapters promise fees_i <= amounts_i and the min enforces
+    ///      it, so an over-reported fee is never skimmed from idle or principal this call did not deliver. Clamp, not
+    ///      revert: a fee-report bug must not block {redeem} or {emergencyUnwind}.
+    function _skimPerformanceFee(address[] memory tokens_, uint256[] memory gross, uint256[] memory fees)
         private
         returns (uint256[] memory cut)
     {
         uint256 n = tokens_.length;
-        if (amounts_.length != n) {
+        if (gross.length != n || fees.length != n) {
             revert PoolmigoVault__LengthMismatch();
         }
         PoolmigoVaultStorage storage $ = _s();
@@ -1139,7 +1142,7 @@ contract PoolmigoVaultUpgradeable is
         cut = new uint256[](n);
         bool anyFee;
         for (uint256 i; i < n; ++i) {
-            uint256 fee = amounts_[i].mulDiv(feeBps, BPS_DENOMINATOR, Math.Rounding.Floor);
+            uint256 fee = Math.min(fees[i], gross[i]).mulDiv(feeBps, BPS_DENOMINATOR, Math.Rounding.Floor);
             if (fee != 0) {
                 cut[i] = fee;
                 anyFee = true;
