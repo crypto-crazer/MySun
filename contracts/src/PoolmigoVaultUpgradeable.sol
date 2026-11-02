@@ -241,8 +241,8 @@ contract PoolmigoVaultUpgradeable is
      *      - Normal: the PARTICIPATING tokens are those the vault holds (T_i > 0) and that are offered
      *        with amount > 0. shares = min over them of floor(amount_i * (S + VS) / (T_i + VA));
      *        required_i = ceil(shares * (T_i + VA) / (S + VS)) is pulled per participating token (VS/VA =
-     *        virtual shares/assets, the donation guard — see the constants). Any offer above `required_i`
-     *        is simply never pulled (no refund transfer needed). EVERY held token (T_i > 0) must be
+     *        virtual shares/assets, the donation guard — `VIRTUAL_*` in {PoolmigoVaultCold}). Any offer
+     *        above `required_i` is simply never pulled (no refund transfer needed). EVERY held token (T_i > 0) must be
      *        offered non-zero — strict participation (fix round): an omitted or zero-offered held token
      *        is rejected (`PoolmigoVault__MissingBasketToken` / `PoolmigoVault__ZeroAmount`), including a
      *        1-wei dust donation. The former dust exemption (optional iff the draw rounds to 0 wei) was
