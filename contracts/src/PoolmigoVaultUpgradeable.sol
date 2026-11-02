@@ -80,6 +80,9 @@ contract PoolmigoVaultUpgradeable is
     uint256 private constant UNWIND_ALL = type(uint256).max;
     /// @dev {_exitAll} sentinel: harvest every adapter (its amounts are all fees).
     uint256 private constant HARVEST_ALL = type(uint256).max - 1;
+    /// @dev Wei per token an adapter's balance may fall across {addLiquidity} / {swapExactIn} (share / multiplier
+    ///      tokens round a transfer's credit down by 1-2 wei); the vault tops that drain back up ({_keepReserves}).
+    uint256 private constant ROUNDING_TOLERANCE = 2;
     // Deposit-quote virtual shares/assets (VS = VA = 1) live with that math in {PoolmigoVaultCold}.
     // Redeem stays real pro-rata and does not use them.
     /// @notice Capability bits (per-adapter mask, P3): {ILiquidityAdapter} ops / {ISwapAdapter} swaps.
@@ -419,6 +422,9 @@ contract PoolmigoVaultUpgradeable is
      *      here, then zeroes both approvals. Range constraints, price guards and the `minLiquidity` / `minSwapOut`
      *      floors are enforced by the adapter ({ILiquidityAdapter-addLiquidity}). Needs CAP_LIQUIDITY
      *      (`PoolmigoVault__CapabilityMissing`). No storage change.
+     *      Adapters size the op with their nominal pull, so a short delivery would be paid out of the adapter's idle
+     *      and v4 fee bank: the adapter's balance of both tokens must not fall ({_keepReserves},
+     *      `PoolmigoVault__AdapterReserveSpent`).
      * @param adapter Registered position implementing {ILiquidityAdapter}.
      * @param p Bounds, target / min liquidity, pull caps, swap floor.
      */
@@ -431,9 +437,11 @@ contract PoolmigoVaultUpgradeable is
         uint256[] memory caps = new uint256[](2);
         (caps[0], caps[1]) = (p.maxAmount0, p.maxAmount1);
         _approveFunded(adapter, t, caps);
+        uint256[] memory reserves = _balancesOf(adapter, t);
         (uint256 id, uint128 added, uint256 spent0, uint256 spent1, uint256 refunded0, uint256 refunded1) =
             ILiquidityAdapter(address(adapter)).addLiquidity(p);
         _revokeAll(adapter, t);
+        _keepReserves(adapter, t, reserves);
 
         emit LiquidityAdded(msg.sender, address(adapter), id, added, spent0, spent1, refunded0, refunded1);
     }
@@ -476,12 +484,13 @@ contract PoolmigoVaultUpgradeable is
      *      (`PoolmigoVault__InsufficientIdle`); `amountIn > 0` (`PoolmigoVault__ZeroAmount`); `tokenIn != tokenOut`
      *      (`PoolmigoVault__DuplicateToken`). Approves exactly `amountIn`, lets the adapter pull it, resets the
      *      approval to 0. The adapter swaps through its own guarded venue path (its TWAP floor or `p.minAmountOut`,
-     *      whichever is stricter) and returns the whole output here; the returned amount is re-checked against
-     *      `p.minAmountOut` (`PoolmigoVault__InsufficientAmountOut`). The adapter's `tokenIn` balance must not fall:
-     *      adapters pull `amountIn` and then pay that same nominal amount into the executor, so a short delivery
-     *      (fee-on-transfer) would spend idle and, on v4, banked fees. Exact tokens finish at the balance they
-     *      started with. A decrease reverts `PoolmigoVault__InexactDelivery` and undoes the swap. One check here
-     *      covers every adapter. Value moves between basket tokens only; no fee, no storage change.
+     *      whichever is stricter) and sends the output here. The output is MEASURED: `amountOut` is the vault's
+     *      `tokenOut` balance gain (the adapter's return value is not used), re-checked against `p.minAmountOut`
+     *      (`PoolmigoVault__InsufficientAmountOut`) and emitted in `SwapSettled`. Adapters pull `amountIn` and pay that
+     *      same nominal amount on, so a short delivery would spend their idle and v4 banked fees: the adapter's
+     *      balance of both tokens must not fall ({_keepReserves}, `PoolmigoVault__AdapterReserveSpent`). Both
+     *      snapshots rely on `nonReentrant`: no other vault entry can move these balances in between.
+     *      Value moves between basket tokens only; no fee, no storage change.
      * @param adapter Registered position implementing {ISwapAdapter}.
      * @param p Token pair (the adapter's), exact input, output floor.
      */
@@ -503,19 +512,15 @@ contract PoolmigoVaultUpgradeable is
             revert PoolmigoVault__DuplicateToken(tokenIn);
         }
 
-        // Adapters pull `amountIn` from the vault, then the executor pulls that same nominal amount from the
-        // adapter. A fee-on-transfer token arrives short, and the executor's pull spends idle / v4 banked fees
-        // (both are this token's balance). Exact tokens net to zero on `tokenIn` — the output is the other token.
-        // Reverting undoes the swap, so the decrease never settles. Checked once, for every adapter.
-        uint256 reservedBefore = IERC20(tokenIn).balanceOf(address(adapter));
+        address[] memory t = new address[](2);
+        (t[0], t[1]) = (tokenIn, tokenOut);
+        uint256[] memory reserves = _balancesOf(adapter, t);
+        uint256 outBefore = _idle(tokenOut);
         IERC20(tokenIn).forceApprove(address(adapter), amountIn);
-        uint256 amountOut = ISwapAdapter(address(adapter)).swapExactIn(p);
+        ISwapAdapter(address(adapter)).swapExactIn(p);
         IERC20(tokenIn).forceApprove(address(adapter), 0);
-        uint256 reservedAfter = IERC20(tokenIn).balanceOf(address(adapter));
-        if (reservedAfter < reservedBefore) {
-            uint256 drained = reservedBefore - reservedAfter;
-            revert PoolmigoVault__InexactDelivery(tokenIn, amountIn, drained >= amountIn ? 0 : amountIn - drained);
-        }
+        _keepReserves(adapter, t, reserves);
+        uint256 amountOut = _idle(tokenOut) - outBefore; // net of any rounding top-up
         if (amountOut < p.minAmountOut) {
             revert PoolmigoVault__InsufficientAmountOut(p.minAmountOut, amountOut);
         }
@@ -1039,6 +1044,36 @@ contract PoolmigoVaultUpgradeable is
     /// @dev The vault's own balance of `token` (its idle) — one call site.
     function _idle(address token) private view returns (uint256) {
         return IERC20(token).balanceOf(address(this));
+    }
+
+    /// @dev `adapter`'s balance of each `t[i]`.
+    function _balancesOf(IPositionAdapter adapter, address[] memory t) private view returns (uint256[] memory b) {
+        uint256 n = t.length;
+        b = new uint256[](n);
+        for (uint256 i; i < n; ++i) {
+            b[i] = IERC20(t[i]).balanceOf(address(adapter));
+        }
+    }
+
+    /// @dev A vault-funded op ({addLiquidity} / {swapExactIn}) must not spend the adapter's reserves (its idle and v4
+    ///      fee bank are plain token balance): each `t[i]` balance must end >= `reserves[i]`, its value before the
+    ///      call. A drain of at most ROUNDING_TOLERANCE wei is the op's own transfer rounding: the vault pays it, sending
+    ///      drain + ROUNDING_TOLERANCE (the top-up may round down too) out of its idle — the surplus stays adapter idle,
+    ///      still counted by `position()`. Anything larger, or a top-up that still falls short, reverts
+    ///      `PoolmigoVault__AdapterReserveSpent` and undoes the op.
+    function _keepReserves(IPositionAdapter adapter, address[] memory t, uint256[] memory reserves) private {
+        uint256[] memory left = _balancesOf(adapter, t);
+        uint256 n = t.length;
+        for (uint256 i; i < n; ++i) {
+            uint256 reserve = reserves[i];
+            if (left[i] < reserve && reserve - left[i] <= ROUNDING_TOLERANCE) {
+                IERC20(t[i]).safeTransfer(address(adapter), reserve - left[i] + ROUNDING_TOLERANCE);
+                left[i] = IERC20(t[i]).balanceOf(address(adapter));
+            }
+            if (left[i] < reserve) {
+                revert PoolmigoVault__AdapterReserveSpent(address(adapter), t[i], reserve, left[i]);
+            }
+        }
     }
 
     /// @dev Registered position by index (bounds-checked) — one copy of the storage read for every loop.

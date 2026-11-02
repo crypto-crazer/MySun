@@ -76,6 +76,7 @@ contract MockLiquidityAdapter is MockPositionAdapter, ILiquidityAdapter, ERC165 
 
     function addLiquidity(AddLiquidityParams calldata p)
         external
+        virtual
         onlyVault
         returns (uint256, uint128, uint256, uint256, uint256, uint256)
     {

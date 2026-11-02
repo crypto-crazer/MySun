@@ -106,7 +106,7 @@ contract MockPositionAdapter is IPositionAdapter {
         return _poolId;
     }
 
-    function position() public view returns (address[] memory tokens, uint256[] memory amounts) {
+    function position() public view virtual returns (address[] memory tokens, uint256[] memory amounts) {
         tokens = _tokens;
         uint256 n = tokens.length;
         amounts = new uint256[](n);
