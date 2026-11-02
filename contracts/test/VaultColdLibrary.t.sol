@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {MySunVaultUpgradeable} from "contracts/MySunVaultUpgradeable.sol";
@@ -227,8 +228,11 @@ contract VaultColdLibraryTest is Test {
                       DEPLOY SCRIPTS: LINKED-LIBRARY CHECK
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev {VaultColdLink} (inherited by every vault-implementation script) accepts the library Forge linked.
+    /// @dev {VaultColdLink} (inherited by every vault-implementation script) accepts the library Forge linked. Skipped
+    ///      under `forge coverage`: there the linked library is the instrumented build while `vm.getDeployedCode` reads
+    ///      the normal `out/` artifact, so they differ by construction (scripts never run under coverage).
     function test_ColdLink_AcceptsThisBuildsLibrary() public {
+        vm.skip(vm.isContext(VmSafe.ForgeContext.Coverage));
         new ColdLinkProbe();
     }
 
