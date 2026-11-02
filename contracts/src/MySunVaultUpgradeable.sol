@@ -22,7 +22,10 @@ import {IMySunVault} from "contracts/interfaces/IMySunVault.sol";
  *      invisible to it and `__ERC20_init` / `__Ownable_init` look uncalled. They are called: that `initialize` is
  *      validated with every check on as part of {PoolmigoVaultUpgradeable}, and this contract adds no code
  *      (test/MySunArtifacts.t.sol). Every other check, storage layout included, still runs here.
+ *      The inherited runtime links {PoolmigoVaultCold}. This contract adds no call of its own, but the
+ *      validator reads the link off this bytecode, so it needs the same allowance as the base.
  * @custom:oz-upgrades-unsafe-allow missing-initializer
+ * @custom:oz-upgrades-unsafe-allow external-library-linking
  * @custom:security-contact security@mysun.example
  */
 contract MySunVaultUpgradeable is PoolmigoVaultUpgradeable, IMySunVault {

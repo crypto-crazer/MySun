@@ -18,6 +18,7 @@ import {ISwapExecutor} from "contracts/interfaces/ISwapExecutor.sol";
 import {UniswapV4HookedAdapter} from "contracts/adapters/UniswapV4HookedAdapter.sol";
 import {IUniswapV3PoolMinimal} from "contracts/adapters/uniswap/IUniswapV3PoolMinimal.sol";
 import {PoolKey, IPoolManagerMinimal} from "contracts/adapters/uniswap/v4/IPoolManagerMinimal.sol";
+import {VaultColdLink} from "./VaultColdLink.sol";
 
 interface IUniswapV3FactoryMinimal {
     function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address);
@@ -60,7 +61,7 @@ interface IUniswapV3FactoryMinimal {
 ///   PHASE=plan bash script/stock-vaults.sh --rpc-url rhc --sender <owner>                      (read-only)
 ///   PHASE=vaults bash script/stock-vaults.sh --rpc-url rhc --sender <owner> \
 ///     --account <keystore> --password-file <pw> --broadcast --slow
-contract DeployStockVaults is Script {
+contract DeployStockVaults is Script, VaultColdLink {
     using SafeERC20 for IERC20;
 
     /* ---------------- roles (shared/deployments.json + notes/DEPLOY-RHC.md, verified live 2026-10-27) ---------------- */

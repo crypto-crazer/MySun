@@ -22,6 +22,7 @@ import {IPositionManagerMinimal} from "contracts/adapters/uniswap/v4/IPositionMa
 import {V4StateReader} from "contracts/adapters/uniswap/v4/V4StateReader.sol";
 import {UniversalRouterSwapExecutor} from "contracts/swap/UniversalRouterSwapExecutor.sol";
 import {UniversalRouterNativeSwapExecutor} from "contracts/swap/UniversalRouterNativeSwapExecutor.sol";
+import {VaultColdLink} from "./VaultColdLink.sol";
 
 /// @dev The PoolManager surface the provisioner needs beyond the adapters' minimal ABI (v4-core public ABI).
 interface IPoolManagerProvision is IPoolManagerMinimal {
@@ -413,7 +414,7 @@ contract DemoTriPoolProvision is TriPoolBase {
  * addAdapter — capability masks derive there —, keeper, genesis) are signed by #201 = OWNER (the `--private-key`),
  * keeper `deployTo` by #1. Appends (or replaces) the `"tri"` entry of ../shared/deployment.local.json, last.
  */
-contract DemoTriPool is TriPoolBase {
+contract DemoTriPool is TriPoolBase, VaultColdLink {
     using SafeERC20 for IERC20;
 
     uint16 internal constant FEE_BPS = 1000; // 10% performance fee (as "demo" / "pons")

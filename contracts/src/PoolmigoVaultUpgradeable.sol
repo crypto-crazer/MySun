@@ -18,7 +18,7 @@ import {IPositionAdapter} from "contracts/interfaces/IPositionAdapter.sol";
 import {ILiquidityAdapter} from "contracts/interfaces/ILiquidityAdapter.sol";
 import {ISwapAdapter} from "contracts/interfaces/ISwapAdapter.sol";
 import {IDepositSplit} from "contracts/interfaces/IDepositSplit.sol";
-import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
+import {PoolmigoVaultCold} from "contracts/PoolmigoVaultCold.sol";
 
 /**
  * @title PoolmigoVaultUpgradeable
@@ -42,6 +42,10 @@ import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165C
  *         - Upgrade authority is `owner` (MUST be a multisig behind a timelock on mainnet).
  *
  * @dev Get an audit before mainnet. Adapters are trusted, owner-registered venue wrappers.
+ *      Adapter registry, the deposit quote, basket totals and the redeem preview live in the linked
+ *      {PoolmigoVaultCold} library (EIP-170). It is delegatecalled, stateless, and not an authority —
+ *      `onlyOwner` and the keeper gates stay here. Forge links it for tests and scripts.
+ * @custom:oz-upgrades-unsafe-allow external-library-linking
  * @custom:security-contact security@mysun.example
  */
 contract PoolmigoVaultUpgradeable is
@@ -76,23 +80,8 @@ contract PoolmigoVaultUpgradeable is
     uint256 private constant UNWIND_ALL = type(uint256).max;
     /// @dev {_exitAll} sentinel: harvest every adapter (its amounts are all fees).
     uint256 private constant HARVEST_ALL = type(uint256).max - 1;
-    /// @dev Virtual shares / virtual assets (donation / inflation guard) — applied to the DEPOSIT
-    ///      conversion only: shares = floor(amount * (S + VIRTUAL_SHARES) / (T + VIRTUAL_ASSETS)).
-    ///      Redemption stays REAL pro-rata. VIRTUAL_ASSETS is per basket token (1 raw unit each).
-    ///
-    ///      Final values VS = VA = 1 (OZ ERC-4626's default offset-0 ratio), tuned DOWN from the 1e6/1
-    ///      starting point because the deposit side is virtual but redeem is real: a deposit→redeem
-    ///      round trip on token i returns <= what was pulled iff VS/VA <= S/T_i (shares per raw unit).
-    ///      At the ≈$1/share genesis scale, S/T_i ≈ price_i * 1e18 / 10^dec_i — ~1e3 for an 18-dp WETH
-    ///      leg — so VS = 1e6 let the WETH leg round-trip up to +997 wei (fuzz counterexample; the
-    ///      demo-scale sweep also gained). VS = 1 holds for every token priced >= 1 display unit per
-    ///      whole token; below that (18-dp micro-price tokens) the residual is < 1 share-wei of value.
-    ///      The donation / inflation defence does not rest on the virtual size: genesis is owner-gated
-    ///      with a large K, and deposits pull only ceil(shares * (T + VA) / (S + VS)), so a depositor
-    ///      pays for exactly the shares it receives. At a degenerate 1-share-wei supply, VS = 1 still
-    ///      makes a donating sole holder strictly lose (tests: test_DonationInflation_*).
-    uint256 private constant VIRTUAL_SHARES = 1;
-    uint256 private constant VIRTUAL_ASSETS = 1;
+    // Deposit-quote virtual shares/assets (VS = VA = 1) live with that math in {PoolmigoVaultCold}.
+    // Redeem stays real pro-rata and does not use them.
     /// @notice Capability bits (per-adapter mask, P3): {ILiquidityAdapter} ops / {ISwapAdapter} swaps.
     uint8 public constant CAP_LIQUIDITY = 1;
     uint8 public constant CAP_SWAP = 2;
@@ -572,38 +561,10 @@ contract PoolmigoVaultUpgradeable is
     }
 
     /// @notice Register a new position (a DEX+pool adapter). Every token it reports must be in the basket.
+    /// @dev Body is {PoolmigoVaultCold-addAdapter} (linked). Capabilities are derived from the adapter's ERC-165
+    ///      answers there; a non-ERC-165 adapter gets 0 — never a revert.
     function addAdapter(IPositionAdapter adapter) external onlyOwner {
-        if (address(adapter) == address(0)) {
-            revert PoolmigoVault__ZeroAddress();
-        }
-        PoolmigoVaultStorage storage $ = _s();
-        if ($.isAdapter[address(adapter)]) {
-            revert PoolmigoVault__AdapterAlreadyRegistered(address(adapter));
-        }
-        if ($.adapters.length >= MAX_ADAPTERS) {
-            revert PoolmigoVault__MaxAdaptersReached(MAX_ADAPTERS);
-        }
-        (address[] memory t,) = _positionOf(adapter);
-        uint256 n = t.length;
-        if (n == 0) {
-            revert PoolmigoVault__AdapterNoTokens(address(adapter));
-        }
-        for (uint256 i; i < n; ++i) {
-            if (t[i] == address(0)) {
-                revert PoolmigoVault__ZeroAddress();
-            }
-            if (!$.isToken[t[i]]) {
-                revert PoolmigoVault__AdapterTokenNotRegistered(address(adapter), t[i]);
-            }
-        }
-        $.isAdapter[address(adapter)] = true;
-        $.adapters.push(adapter);
-        emit AdapterAdded(address(adapter), adapter.dex(), adapter.poolId());
-        // Capabilities are DERIVED from the adapter's own ERC-165 answers (the owner cannot grant unsupported ones);
-        // a non-ERC-165 adapter gets 0 — never a revert.
-        uint8 caps = _supportedCapabilities(adapter);
-        $.capabilities[address(adapter)] = caps;
-        emit AdapterCapabilitySet(address(adapter), caps);
+        PoolmigoVaultCold.addAdapter(adapter);
     }
 
     /**
@@ -613,37 +574,12 @@ contract PoolmigoVaultUpgradeable is
      *      (`PoolmigoVault__CapabilityUnsupported`) — the owner can narrow, never fake, a capability.
      */
     function setAdapterCapability(IPositionAdapter adapter, uint8 capBit, bool enabled) external onlyOwner {
-        PoolmigoVaultStorage storage $ = _s();
-        _requireRegistered(adapter);
-        if (capBit != CAP_LIQUIDITY && capBit != CAP_SWAP) {
-            revert PoolmigoVault__InvalidCapability(capBit);
-        }
-        uint8 caps = $.capabilities[address(adapter)];
-        if (enabled) {
-            if (_supportedCapabilities(adapter) & capBit == 0) {
-                revert PoolmigoVault__CapabilityUnsupported(address(adapter), capBit);
-            }
-            caps |= capBit;
-        } else {
-            caps &= ~capBit;
-        }
-        $.capabilities[address(adapter)] = caps;
-        emit AdapterCapabilitySet(address(adapter), caps);
+        PoolmigoVaultCold.setAdapterCapability(adapter, capBit, enabled);
     }
 
     /// @notice Remove a position. Must be emptied first (unwound) so no value is orphaned.
     function removeAdapter(IPositionAdapter adapter) external onlyOwner {
-        PoolmigoVaultStorage storage $ = _s();
-        _requireRegistered(adapter);
-        (address[] memory t, uint256[] memory a) = _positionOf(adapter);
-        uint256 n = t.length;
-        for (uint256 i; i < n; ++i) {
-            if (a[i] != 0) {
-                revert PoolmigoVault__AdapterStillFunded(address(adapter), t[i], a[i]);
-            }
-        }
-        _dropAdapter($, adapter);
-        emit AdapterRemoved(address(adapter));
+        PoolmigoVaultCold.removeAdapter(adapter);
     }
 
     /**
@@ -662,10 +598,7 @@ contract PoolmigoVaultUpgradeable is
      * @param adapter Registered adapter to drop.
      */
     function forceRemoveAdapter(IPositionAdapter adapter) external onlyOwner {
-        PoolmigoVaultStorage storage $ = _s();
-        _requireRegistered(adapter);
-        _dropAdapter($, adapter);
-        emit AdapterForceRemoved(address(adapter));
+        PoolmigoVaultCold.forceRemoveAdapter(adapter);
     }
 
     /// @notice Pause/unpause the vault — a full safety freeze: deposits, redemptions, deploys and rebalances.
@@ -837,18 +770,7 @@ contract PoolmigoVaultUpgradeable is
      * @return amounts Total amount held per token (idle + positions, incl. uncollected fees net of the perf fee).
      */
     function totalTokens() public view returns (address[] memory tokens_, uint256[] memory amounts) {
-        PoolmigoVaultStorage storage $ = _s();
-        tokens_ = $.tokens;
-        uint256 n = tokens_.length;
-        amounts = new uint256[](n);
-        for (uint256 i; i < n; ++i) {
-            amounts[i] = _idle(tokens_[i]);
-        }
-        uint256 len = $.adapters.length;
-        for (uint256 i; i < len; ++i) {
-            (address[] memory t, uint256[] memory a) = _positionOf(_adapterAt(i));
-            _accumulate(tokens_, amounts, t, a);
-        }
+        return PoolmigoVaultCold.totalTokens();
     }
 
     /**
@@ -886,18 +808,7 @@ contract PoolmigoVaultUpgradeable is
         view
         returns (address[] memory tokens_, uint256[] memory owedAmounts)
     {
-        tokens_ = _s().tokens;
-        uint256 n = tokens_.length;
-        owedAmounts = new uint256[](n);
-        uint256 supply = totalSupply();
-        if (supply == 0 || shares == 0) {
-            return (tokens_, owedAmounts);
-        }
-        uint256 sharesWad = shares.mulDiv(WAD, supply, Math.Rounding.Floor);
-        uint256[] memory slices = _adapterSlices(tokens_, sharesWad);
-        for (uint256 i; i < n; ++i) {
-            owedAmounts[i] = slices[i] + shares.mulDiv(_idle(tokens_[i]), supply, Math.Rounding.Floor);
-        }
+        return PoolmigoVaultCold.previewRedeem(shares, totalSupply());
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -906,22 +817,6 @@ contract PoolmigoVaultUpgradeable is
 
     /// @notice UUPS upgrade authorization — owner only (multisig behind timelock on mainnet).
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-    /// @dev Unregister `adapter` (swap-and-pop; the registry order of the others may change). Never calls it.
-    function _dropAdapter(PoolmigoVaultStorage storage $, IPositionAdapter adapter) private {
-        $.isAdapter[address(adapter)] = false;
-        delete $.capabilities[address(adapter)];
-
-        IPositionAdapter[] storage arr = $.adapters;
-        uint256 len = arr.length;
-        for (uint256 i; i < len; ++i) {
-            if (address(arr[i]) == address(adapter)) {
-                arr[i] = arr[len - 1];
-                arr.pop();
-                break;
-            }
-        }
-    }
 
     /**
      * @dev {deposit}'s atomic proportional deploy: ONE {IDepositSplit-split} call over the pulled `required`, then each
@@ -1008,19 +903,6 @@ contract PoolmigoVaultUpgradeable is
         _requireOpenAdapter(adapter);
         if (_s().capabilities[address(adapter)] & capBit == 0) {
             revert PoolmigoVault__CapabilityMissing(address(adapter), capBit);
-        }
-    }
-
-    /// @dev The capability mask the adapter itself supports: its own ERC-165 answers for {ILiquidityAdapter}
-    ///      (CAP_LIQUIDITY) and {ISwapAdapter} (CAP_SWAP), via OZ `ERC165Checker`'s unchecked variant (a plain
-    ///      `supportsInterface(id)` staticcall) — a non-ERC-165 adapter (no such function / short return data) reads
-    ///      as 0 instead of reverting.
-    function _supportedCapabilities(IPositionAdapter adapter) private view returns (uint8 caps) {
-        if (ERC165Checker.supportsERC165InterfaceUnchecked(address(adapter), type(ILiquidityAdapter).interfaceId)) {
-            caps = CAP_LIQUIDITY;
-        }
-        if (ERC165Checker.supportsERC165InterfaceUnchecked(address(adapter), type(ISwapAdapter).interfaceId)) {
-            caps |= CAP_SWAP;
         }
     }
 
@@ -1189,189 +1071,13 @@ contract PoolmigoVaultUpgradeable is
                        INTERNAL READ-ONLY FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Deposit math + input validation. See {deposit} for the rules.
+    /// @dev Deposit math + input validation. See {deposit} for the rules. Body is {PoolmigoVaultCold-previewDeposit}.
     function _previewDeposit(address[] calldata tokens_, uint256[] calldata amounts_)
         internal
         view
         returns (uint256 shares, uint256[] memory required)
     {
-        uint256 n = tokens_.length;
-        if (n == 0 || n != amounts_.length) {
-            revert PoolmigoVault__LengthMismatch();
-        }
-
-        (address[] memory registry, uint256[] memory totals) = totalTokens();
-        uint256 m = registry.length;
-
-        // Map registry index -> offered index (NOT_FOUND if not offered); rejects unknowns + duplicates.
-        (uint256[] memory offeredAt, uint256[] memory registryIdx) = _mapOffered(registry, tokens_, n, m);
-
-        uint256 supply = totalSupply();
-        required = new uint256[](n);
-
-        if (supply == 0) {
-            // Genesis: owner only, strict full basket, every amount > 0, pulled in full; shares = K.
-            // No virtuals here — K is the deliberate scale.
-            if (msg.sender != owner()) {
-                revert PoolmigoVault__GenesisNotOwner();
-            }
-            for (uint256 r; r < m; ++r) {
-                if (offeredAt[r] == NOT_FOUND) {
-                    revert PoolmigoVault__MissingBasketToken(registry[r]);
-                }
-            }
-            for (uint256 i; i < n; ++i) {
-                if (amounts_[i] == 0) {
-                    revert PoolmigoVault__ZeroAmount();
-                }
-                required[i] = amounts_[i];
-            }
-            shares = _s().genesisShares;
-        } else {
-            // Normal: the binding (min-ratio) participating token sets the share count; every held
-            // token (T_i > 0) must be offered non-zero — strict participation (see _bindingShares).
-            shares = _bindingShares(registry, totals, offeredAt, amounts_, supply);
-            if (shares == 0) {
-                revert PoolmigoVault__ZeroShares();
-            }
-            // required_i = ceil(shares * (T_i + VA) / (S + VS)) <= amounts_[i] by construction;
-            // tokens with T_i == 0 pull 0 (a zero offer for a held token reverts in _bindingShares).
-            _fillRequired(required, registryIdx, totals, amounts_, shares, supply);
-        }
-
-        // Supply cap (PRD F1.2) — shared by {deposit} and {previewDeposit}, genesis included.
-        uint256 cap = _s().maxTotalSupply;
-        if (cap != 0 && supply + shares > cap) {
-            revert PoolmigoVault__SupplyCapExceeded(supply + shares, cap);
-        }
-    }
-
-    /// @dev Builds (registry index -> offered index) and (offered index -> registry index) maps.
-    ///      Reverts on unknown or duplicate offered tokens.
-    function _mapOffered(address[] memory registry, address[] calldata tokens_, uint256 n, uint256 m)
-        private
-        pure
-        returns (uint256[] memory offeredAt, uint256[] memory registryIdx)
-    {
-        offeredAt = new uint256[](m);
-        for (uint256 r; r < m; ++r) {
-            offeredAt[r] = NOT_FOUND;
-        }
-        registryIdx = new uint256[](n);
-        for (uint256 i; i < n; ++i) {
-            uint256 r = _indexOf(registry, tokens_[i]);
-            if (r == NOT_FOUND) {
-                revert PoolmigoVault__TokenNotRegistered(tokens_[i]);
-            }
-            if (offeredAt[r] != NOT_FOUND) {
-                revert PoolmigoVault__DuplicateToken(tokens_[i]);
-            }
-            offeredAt[r] = i;
-            registryIdx[i] = r;
-        }
-    }
-
-    /// @dev Min-ratio share count over the PARTICIPATING tokens (T_i > 0, offered with amount_i > 0):
-    ///      min_i floor(amount_i * (S + VS) / (T_i + VA)). STRICT PARTICIPATION (fix round): every held
-    ///      token (T_i > 0) must be offered non-zero — an omitted or zero-offered held token reverts
-    ///      (`MissingBasketToken` / `PoolmigoVault__ZeroAmount`, registry-order; if nothing participates,
-    ///      the first omitted held token reverts, as before). The former dust exemption — optional iff
-    ///      floor(shares * T_i / S) == 0 — is removed: it let k merged deposits whose sub-wei "zero" draws
-    ///      each round down compose into >= 1 wei payable at the merged redeem (K-14 reread; issue #2).
-    ///      T_i == 0 is optional by construction (nothing pulled, nothing claimable). Accepted cost:
-    ///      a registered token held as dust must be offered (and held) by every depositor — fine for
-    ///      owner-curated baskets; see 05-known-issues K-14. The second loop only runs when a held token
-    ///      was omitted (normal path unchanged).
-    function _bindingShares(
-        address[] memory registry,
-        uint256[] memory totals,
-        uint256[] memory offeredAt,
-        uint256[] calldata amounts_,
-        uint256 supply
-    ) private pure returns (uint256 shares) {
-        bool bound;
-        bool omitted;
-        uint256 m = registry.length;
-        for (uint256 r; r < m; ++r) {
-            if (totals[r] == 0) {
-                continue;
-            }
-            uint256 i = offeredAt[r];
-            if (i == NOT_FOUND || amounts_[i] == 0) {
-                omitted = true;
-                continue;
-            }
-            uint256 candidate =
-                amounts_[i].mulDiv(supply + VIRTUAL_SHARES, totals[r] + VIRTUAL_ASSETS, Math.Rounding.Floor);
-            if (!bound || candidate < shares) {
-                shares = candidate;
-                bound = true;
-            }
-        }
-        if (omitted) {
-            for (uint256 r; r < m; ++r) {
-                uint256 total = totals[r];
-                if (total == 0) {
-                    continue;
-                }
-                uint256 i = offeredAt[r];
-                if (i != NOT_FOUND && amounts_[i] != 0) {
-                    continue;
-                }
-                // Strict participation: a held token (T > 0) may not be omitted or offered 0 —
-                // the former dust exemption is removed (K-14 reread: merged sub-wei roundings
-                // composed into >= 1 wei at redeem, issue #2). Same errors, registry order:
-                if (i == NOT_FOUND) {
-                    revert PoolmigoVault__MissingBasketToken(registry[r]);
-                }
-                revert PoolmigoVault__ZeroAmount();
-            }
-        }
-    }
-
-    /// @dev required_i = ceil(shares * (T_i + VA) / (S + VS)) for participating tokens; tokens with T_i == 0 pull 0
-    ///      (a zero offer for a held token is inadmissible — strict participation, see {_bindingShares}).
-    function _fillRequired(
-        uint256[] memory required,
-        uint256[] memory registryIdx,
-        uint256[] memory totals,
-        uint256[] calldata amounts_,
-        uint256 shares,
-        uint256 supply
-    ) private pure {
-        uint256 n = required.length;
-        for (uint256 i; i < n; ++i) {
-            uint256 total = totals[registryIdx[i]];
-            if (total != 0 && amounts_[i] != 0) {
-                required[i] = shares.mulDiv(total + VIRTUAL_ASSETS, supply + VIRTUAL_SHARES, Math.Rounding.Ceil);
-            }
-        }
-    }
-
-    /// @dev Per-token sum of floor(holding * sharesWad / 1e18) across adapters (registry-aligned).
-    ///      Mirrors the fraction each adapter is asked for in {IPositionAdapter-withdrawProportional}.
-    function _adapterSlices(address[] memory registry, uint256 sharesWad)
-        private
-        view
-        returns (uint256[] memory slices)
-    {
-        uint256 n = registry.length;
-        slices = new uint256[](n);
-        if (sharesWad == 0) {
-            return slices;
-        }
-        PoolmigoVaultStorage storage $ = _s();
-        uint256 len = $.adapters.length;
-        for (uint256 i; i < len; ++i) {
-            (address[] memory t, uint256[] memory a) = _positionOf(_adapterAt(i));
-            uint256 m = t.length;
-            for (uint256 j; j < m; ++j) {
-                uint256 idx = _indexOf(registry, t[j]);
-                if (idx != NOT_FOUND) {
-                    slices[idx] += a[j].mulDiv(sharesWad, WAD, Math.Rounding.Floor);
-                }
-            }
-        }
+        return PoolmigoVaultCold.previewDeposit(tokens_, amounts_);
     }
 
     /// @dev Add an adapter-reported (tokens, amounts) vector into registry-aligned `totals`.

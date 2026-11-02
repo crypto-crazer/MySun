@@ -16,13 +16,14 @@ import {IUniswapV3PoolMinimal} from "contracts/adapters/uniswap/IUniswapV3PoolMi
 import {PoolKey} from "contracts/adapters/uniswap/v4/IPoolManagerMinimal.sol";
 import {PoolmigoZapIn} from "contracts/periphery/PoolmigoZapIn.sol";
 import {PoolmigoZapOut} from "contracts/periphery/PoolmigoZapOut.sol";
+import {VaultColdLink} from "./VaultColdLink.sol";
 
 /// @notice MAINNET (4663) deployment of the 3-pool "sunTriLP" vault — mirror of the demo `DemoTriPool.s.sol`
 ///         minus any local-chain provisioning, signed by the burner keystore (owner/treasury/keeper).
 ///         PHASE=1 (default): DepositSplit + vault proxy (initialize with K) + 18 v4 adapters + owner wiring
 ///         (swap venue ×18, addAdapter ×18, keepers) + zap registration/routes. PHASE=2: owner genesis deposit
 ///         (mints exactly K; needs the burner to HOLD the seed basket) + keeper deployTo of the whole idle.
-contract DeployTriVaultMainnet is Script {
+contract DeployTriVaultMainnet is Script, VaultColdLink {
     using SafeERC20 for IERC20;
 
     address internal constant OWNER = 0x27447D6F3eCAA5f0c6b89a5b3D2FA03ff3392eaa; // burner (owner=treasury=keeper)

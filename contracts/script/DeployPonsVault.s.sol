@@ -9,6 +9,7 @@ import {IAdapterFees} from "contracts/interfaces/IAdapterFees.sol";
 import {PoolKey} from "contracts/adapters/uniswap/v4/IPoolManagerMinimal.sol";
 import {DepositSplit} from "contracts/periphery/DepositSplit.sol";
 import {UniswapV4HookedAdapter} from "contracts/adapters/UniswapV4HookedAdapter.sol";
+import {VaultColdLink} from "./VaultColdLink.sol";
 
 /// @notice OPS (4663 mainnet): deploy a SECOND vault — sunPonsLP — mirroring the demo chain's "pons" vault
 ///         (script/DemoLocalFork.s.sol) exactly: basket [USDG, PONS], treasury = owner, perf fee 1000 bps,
@@ -20,7 +21,7 @@ import {UniswapV4HookedAdapter} from "contracts/adapters/UniswapV4HookedAdapter.
 ///     --account mysun-rehearsal --password-file <path> --broadcast
 ///   Env: OWNER (default msg.sender). No genesis deposit here — the first owner deposit mints the K share
 ///         constant (the owner funds PONS/USDG in kind out-of-band when ready).
-contract DeployPonsVault is Script {
+contract DeployPonsVault is Script, VaultColdLink {
     address internal constant OWNER = 0x27447D6F3eCAA5f0c6b89a5b3D2FA03ff3392eaa; // burner — owner / treasury / keeper
     address internal constant OPS_KEEPER = 0x0856965c4A6346C5E33352A670CEb6E569DeF678; // same whitelist as sunEthLP
     address internal constant PONS = 0x39dBED3a2bd333467115dE45665cC57F813C4571; // currency0 / basket token1

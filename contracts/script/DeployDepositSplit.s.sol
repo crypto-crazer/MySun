@@ -3,6 +3,7 @@ pragma solidity ^0.8.34;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {DepositSplit} from "contracts/periphery/DepositSplit.sol";
+import {VaultColdLink} from "./VaultColdLink.sol";
 
 /**
  * @notice Resolves the {DepositSplit} a vault implementation pins at construction (its immutable): the `DEPOSIT_SPLIT`
@@ -10,7 +11,7 @@ import {DepositSplit} from "contracts/periphery/DepositSplit.sol";
  *         the broadcast, before the implementation is created. The splitter is stateless and ownerless, so reusing
  *         one per chain and deploying a fresh one are equivalent; reuse keeps the chain's registry short.
  */
-abstract contract DepositSplitEnv is Script {
+abstract contract DepositSplitEnv is Script, VaultColdLink {
     function _depositSplit() internal returns (address split) {
         split = vm.envOr("DEPOSIT_SPLIT", address(0));
         if (split == address(0)) {
