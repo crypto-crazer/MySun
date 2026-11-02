@@ -28,6 +28,7 @@ import {UniversalRouterSwapExecutor} from "contracts/swap/UniversalRouterSwapExe
 import {UniversalRouterNativeSwapExecutor} from "contracts/swap/UniversalRouterNativeSwapExecutor.sol";
 import {MockPositionAdapter} from "test/mocks/MockPositionAdapter.sol";
 import {MockToken} from "test/mocks/MockToken.sol";
+import {VaultColdLink} from "./VaultColdLink.sol";
 
 /**
  * @notice Local demo stack on an Anvil FORK of Robinhood Chain — the fork sibling of DemoLocal.s.sol.
@@ -78,7 +79,7 @@ import {MockToken} from "test/mocks/MockToken.sol";
  * The dev keys/accounts below are the publicly known Anvil defaults. LOCAL ONLY — the fork is a private
  * copy of the chain; nothing here is ever broadcast to Robinhood Chain.
  */
-contract DemoLocalFork is Script {
+contract DemoLocalFork is Script, VaultColdLink {
     /* ================ Anvil dev accounts (public, well-known — LOCAL ONLY) ================ */
     address internal constant OWNER = 0x9B63F0Cef479924E5d2C4E22DBE31E6d0353B448; // #201, deployer (nonce-stable)
     address internal constant KEEPER = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8; // #1, keeper service

@@ -132,6 +132,7 @@ interface IPoolmigoVault {
     error PoolmigoVault__InvalidCapability(uint8 capBit);
     error PoolmigoVault__InsufficientAmountOut(uint256 minAmountOut, uint256 amountOut);
     error PoolmigoVault__InexactDelivery(address token, uint256 required, uint256 received);
+    error PoolmigoVault__AdapterReserveSpent(address adapter, address token, uint256 reserveBefore, uint256 reserveAfter);
 
     /*//////////////////////////////////////////////////////////////
                                  VIEWS
@@ -154,10 +155,14 @@ interface IPoolmigoVault {
     function rebalance() external returns (address[] memory tokens_, uint256[] memory harvested, uint256[] memory fees);
 
     /// @notice Keeper: swap `p.amountIn` of the vault's idle through a registered {ISwapAdapter} (`CAP_SWAP`); the
-    ///         output lands back in the vault (approval reset to 0, `amountOut >= p.minAmountOut` re-checked here).
+    ///         output lands back in the vault (approval reset to 0). `amountOut` is the vault's measured `tokenOut`
+    ///         gain, re-checked against `p.minAmountOut`. The adapter's balance of both tokens must not fall
+    ///         (`PoolmigoVault__AdapterReserveSpent`, 2-wei rounding topped up by the vault): a short delivery must
+    ///         not spend the adapter's idle or v4 banked fees.
     function swapExactIn(IPositionAdapter adapter, ISwapAdapter.SwapParams calldata p) external;
 
-    /// @notice Keeper: exact add on a registered {ILiquidityAdapter} (caps approved, then reset to 0).
+    /// @notice Keeper: exact add on a registered {ILiquidityAdapter} (caps approved, then reset to 0). The adapter's
+    ///         balance of both tokens must not fall, as in {swapExactIn}.
     function addLiquidity(IPositionAdapter adapter, ILiquidityAdapter.AddLiquidityParams calldata p) external;
 
     /// @notice Keeper: exact remove (or idle refund) on a registered {ILiquidityAdapter}; everything to the vault.

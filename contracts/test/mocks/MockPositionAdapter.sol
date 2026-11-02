@@ -35,7 +35,6 @@ contract MockPositionAdapter is IPositionAdapter {
 
     error MockAdapter__OnlyVault();
     error MockAdapter__LengthMismatch();
-    error MockAdapter__BadFeeBps();
 
     modifier onlyVault() {
         if (msg.sender != vault) revert MockAdapter__OnlyVault();
@@ -81,9 +80,9 @@ contract MockPositionAdapter is IPositionAdapter {
         }
     }
 
-    /// @notice Test knob: report `bps` / 10_000 of every delivered amount as accrued fees (<= the amount).
+    /// @notice Test knob: report `bps` / 10_000 of every delivered amount as accrued fees. `bps` <= 10_000 is an honest
+    ///         split (fees <= the amount); above it models a buggy adapter that over-reports (fees > the amount).
     function setReportedFeeBps(uint256 bps) external {
-        if (bps > 10_000) revert MockAdapter__BadFeeBps();
         reportedFeeBps = bps;
     }
 
@@ -107,7 +106,7 @@ contract MockPositionAdapter is IPositionAdapter {
         return _poolId;
     }
 
-    function position() public view returns (address[] memory tokens, uint256[] memory amounts) {
+    function position() public view virtual returns (address[] memory tokens, uint256[] memory amounts) {
         tokens = _tokens;
         uint256 n = tokens.length;
         amounts = new uint256[](n);

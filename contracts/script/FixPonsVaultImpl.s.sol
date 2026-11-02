@@ -5,6 +5,7 @@ import {Script, console2} from "forge-std/Script.sol";
 import {Upgrades, Options} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import {DepositSplit} from "contracts/periphery/DepositSplit.sol";
 import {MySunVaultUpgradeable} from "contracts/MySunVaultUpgradeable.sol";
+import {VaultColdLink} from "./VaultColdLink.sol";
 
 /// @notice Fix the sunPonsLP implementation on mainnet 4663: the original deploy embedded a
 ///         `new DepositSplit()` evaluated OUTSIDE vm.broadcast, so the impl immutable points at a
@@ -12,7 +13,7 @@ import {MySunVaultUpgradeable} from "contracts/MySunVaultUpgradeable.sol";
 ///         (1) broadcasts a REAL DepositSplit create, then (2) redeploys the implementation with
 ///         the real address as constructor arg and upgrades the proxy (UUPS, owner-only).
 ///         Adapters reference the proxy — unaffected. Storage layout unchanged (same source).
-contract FixPonsVaultImpl is Script {
+contract FixPonsVaultImpl is Script, VaultColdLink {
     address internal constant PROXY = 0x491941246B26A6E9a8CD43BaaFD905492a541667;
     address internal constant OWNER = 0x27447D6F3eCAA5f0c6b89a5b3D2FA03ff3392eaa;
 

@@ -8,6 +8,7 @@ import {MySunVaultUpgradeable} from "contracts/MySunVaultUpgradeable.sol";
 import {DepositSplit} from "contracts/periphery/DepositSplit.sol";
 import {MockPositionAdapter} from "test/mocks/MockPositionAdapter.sol";
 import {MockToken} from "test/mocks/MockToken.sol";
+import {VaultColdLink} from "./VaultColdLink.sol";
 
 /**
  * @notice One-shot local demo stack for Anvil — the shared dev chain for frontend/backend work.
@@ -33,7 +34,7 @@ import {MockToken} from "test/mocks/MockToken.sol";
  * NEVER be funded on a real network. Run against a FRESH anvil (re-running against a used chain
  * would deploy a second stack; that is harmless but confusing).
  */
-contract DemoLocal is Script {
+contract DemoLocal is Script, VaultColdLink {
     /* ================ Anvil dev accounts (public, well-known — LOCAL ONLY) ================ */
     address internal constant OWNER = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // #0, deployer
     address internal constant KEEPER = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8; // #1, keeper service

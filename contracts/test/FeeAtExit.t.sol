@@ -12,6 +12,7 @@ import {ILiquidityAdapter} from "contracts/interfaces/ILiquidityAdapter.sol";
 import {MockToken} from "test/mocks/MockToken.sol";
 import {MockPositionAdapter} from "test/mocks/MockPositionAdapter.sol";
 import {MockLiquidityAdapter} from "test/mocks/MockLiquidityAdapter.sol";
+import {ProRataFeeAdapter} from "test/mocks/ProRataFeeAdapter.sol";
 import {VaultImplArgs} from "test/utils/VaultImplArgs.sol";
 
 /**
@@ -33,8 +34,17 @@ contract FeeAtExitTest is Test {
     address internal treasury = makeAddr("treasury");
     address internal keeper = makeAddr("keeper");
     address internal bob = makeAddr("bob");
+    address internal attacker = makeAddr("attacker");
+
+    struct World {
+        MySunVaultUpgradeable vault;
+        ProRataFeeAdapter adapter;
+        MockToken t0;
+        MockToken t1;
+    }
 
     uint16 internal constant FEE_BPS = 1000; // the ruling's 10%
+    uint16 internal constant ORDER_FEE_BPS = 1500; // the issue #3 example's 15%
     uint256 internal constant BPS = 10_000;
     uint256 internal constant GENESIS = 1_000e18;
     uint256 internal constant SEED_USDG = 1_000e6;
@@ -394,8 +404,378 @@ contract FeeAtExitTest is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
+                FEE BOUND: CUT <= WHAT THE CALL DELIVERED
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev An adapter that over-reports its fee split (5x the slice it delivers) is charged on the slice only: 30% of
+    ///      the slice. Uncapped, the cut would be 150% of the slice, paid out of the receiver's own idle slice.
+    function test_FeeBound_Redeem_OverReportCappedAtSlice() public {
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(3000);
+        _deploy(a1, 500e6, 0.5e18);
+        a1.setReportedFeeBps(5 * BPS);
+
+        // Quarter of the supply: idle slice 125e6 / 0.125e18, a1 slice 125e6 / 0.125e18 (reported fees 5x that).
+        uint256[] memory cut = _amts(37.5e6, 0.0375e18);
+        vm.prank(owner);
+        vm.expectEmit(true, false, false, true, address(vault));
+        emit IPoolmigoVault.PerformanceFeeAccrued(treasury, basket, cut);
+        (, uint256[] memory sent) = vault.redeem(GENESIS / 4, bob);
+
+        assertEq(sent[0], 250e6 - cut[0], "idle slice + adapter slice - capped cut");
+        assertEq(sent[1], 0.25e18 - cut[1]);
+        assertEq(usdg.balanceOf(treasury), cut[0]);
+        assertEq(weth.balanceOf(treasury), cut[1]);
+        assertEq(usdg.balanceOf(address(vault)), 375e6, "remaining holders' idle untouched");
+        assertEq(weth.balanceOf(address(vault)), 0.375e18);
+    }
+
+    /// @dev {pullFrom}: a 10x over-report skims 30% of the slice; the vault's prior idle (every holder's) is never cut.
+    function test_FeeBound_PullFrom_OverReportNeverTouchesIdle() public {
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(3000);
+        _deploy(a1, 400e6, 0.4e18);
+        a1.setReportedFeeBps(10 * BPS);
+        uint256[2] memory idleBefore = _bal(address(vault));
+
+        vm.prank(keeper);
+        vault.pullFrom(IPositionAdapter(address(a1)), 2_500); // slice 100e6 / 0.1e18
+
+        assertEq(usdg.balanceOf(treasury), 30e6, "30% of the slice, not of 10x it");
+        assertEq(weth.balanceOf(treasury), 0.03e18);
+        assertEq(usdg.balanceOf(address(vault)), idleBefore[0] + 70e6);
+        assertEq(weth.balanceOf(address(vault)), idleBefore[1] + 0.07e18);
+    }
+
+    /// @dev {emergencyUnwind}: a 4x over-report still completes (clamp, not revert) and skims 30% of what came back.
+    function test_FeeBound_EmergencyUnwind_OverReportStillUnwinds() public {
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(3000);
+        _deploy(a1, 500e6, 0.5e18);
+        a1.setReportedFeeBps(4 * BPS);
+
+        vm.prank(owner);
+        (, uint256[] memory unwound) = vault.emergencyUnwind();
+
+        assertEq(unwound[0], 500e6, "gross");
+        assertTrue(vault.paused());
+        assertEq(usdg.balanceOf(treasury), 150e6, "30% of what came back");
+        assertEq(weth.balanceOf(treasury), 0.15e18);
+        assertEq(usdg.balanceOf(address(vault)), SEED_USDG - 150e6);
+        assertEq(weth.balanceOf(address(vault)), SEED_WETH - 0.15e18);
+    }
+
+    /// @dev {redeem}, any shares / split (honest or up to 10x over-reported) / fee bps: cut = floor(min(Σ fees, Σ slices)
+    ///      × bps) <= the slices, and the receiver always gets at least its own idle slice.
+    function testFuzz_FeeBound_Redeem(uint256 shares, uint256 split1, uint256 split2, uint16 feeBps) public {
+        shares = bound(shares, 1, GENESIS);
+        split1 = bound(split1, 0, 10 * BPS);
+        split2 = bound(split2, 0, 10 * BPS);
+        feeBps = uint16(bound(feeBps, 0, 3000));
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(feeBps);
+        _deploy(a1, 300e6 + 7, 0.3e18 + 3);
+        _deploy(a2, 200e6 + 1, 0.2e18 + 11);
+        a1.simulateFees(_amts(13e6 + 5, 0.01e18 + 9));
+        a1.setReportedFeeBps(split1);
+        a2.setReportedFeeBps(split2);
+
+        uint256 sharesWad = Math.mulDiv(shares, 1e18, GENESIS);
+        uint256[2] memory idleSlice;
+        uint256[2] memory fees;
+        uint256[2] memory gross;
+        for (uint256 i; i < 2; ++i) {
+            idleSlice[i] = Math.mulDiv(shares, _tok(i).balanceOf(address(vault)), GENESIS);
+            (uint256 g1, uint256 f1) = _slice(a1, i, sharesWad, split1);
+            (uint256 g2, uint256 f2) = _slice(a2, i, sharesWad, split2);
+            gross[i] = g1 + g2;
+            fees[i] = f1 + f2;
+        }
+
+        vm.prank(owner);
+        (, uint256[] memory sent) = vault.redeem(shares, bob);
+
+        for (uint256 i; i < 2; ++i) {
+            uint256 cut = Math.mulDiv(Math.min(fees[i], gross[i]), feeBps, BPS);
+            assertEq(_tok(i).balanceOf(treasury), cut, "cut = floor(min(fees, gross) * bps)");
+            assertLe(cut, gross[i], "cut <= adapter slices");
+            assertEq(sent[i], idleSlice[i] + gross[i] - cut, "net = idle + slices - cut");
+            assertGe(sent[i], idleSlice[i], "own idle slice never skimmed");
+        }
+    }
+
+    /// @dev {pullFrom}, any principal / accrued fees / fraction / split (honest or up to 10x) / fee bps: the cut is
+    ///      floor(min(fees, slice) × bps) <= the slice, and the vault's prior idle is never skimmed.
+    function testFuzz_FeeBound_PullFrom(
+        uint256 u,
+        uint256 w,
+        uint256 accrued,
+        uint256 sharesBps,
+        uint256 split,
+        uint16 feeBps
+    ) public {
+        u = bound(u, 1, SEED_USDG);
+        w = bound(w, 1, SEED_WETH);
+        accrued = bound(accrued, 0, 1e30);
+        sharesBps = bound(sharesBps, 1, BPS);
+        split = bound(split, 0, 10 * BPS);
+        feeBps = uint16(bound(feeBps, 0, 3000));
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(feeBps);
+        _deploy(a1, u, w);
+        a1.simulateFees(_amts(accrued, 0));
+        a1.setReportedFeeBps(split);
+        uint256[2] memory idleBefore = _bal(address(vault));
+
+        vm.prank(keeper);
+        (, uint256[] memory gross) = vault.pullFrom(IPositionAdapter(address(a1)), sharesBps);
+
+        for (uint256 i; i < 2; ++i) {
+            uint256 fees = Math.mulDiv(gross[i], split, BPS);
+            uint256 cut = Math.mulDiv(split <= BPS ? fees : gross[i], feeBps, BPS);
+            assertEq(_tok(i).balanceOf(treasury), cut, "honest: floor(fees * bps); over-report: floor(slice * bps)");
+            assertLe(cut, gross[i], "cut <= slice");
+            assertEq(_tok(i).balanceOf(address(vault)), idleBefore[i] + gross[i] - cut, "prior idle never skimmed");
+        }
+    }
+
+    /// @dev {emergencyUnwind}, any principal / accrued fees / split / fee bps: cut <= what came back, prior idle kept.
+    function testFuzz_FeeBound_EmergencyUnwind(uint256 u, uint256 accrued, uint256 split, uint16 feeBps) public {
+        u = bound(u, 1, SEED_USDG);
+        accrued = bound(accrued, 0, 1e30);
+        split = bound(split, 0, 10 * BPS);
+        feeBps = uint16(bound(feeBps, 0, 3000));
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(feeBps);
+        _deploy(a1, u, 0);
+        a1.simulateFees(_amts(accrued, 0));
+        a1.setReportedFeeBps(split);
+
+        vm.prank(owner);
+        (, uint256[] memory gross) = vault.emergencyUnwind();
+
+        uint256 cut = Math.mulDiv(Math.min(Math.mulDiv(gross[0], split, BPS), gross[0]), feeBps, BPS);
+        assertEq(gross[0], u + accrued);
+        assertEq(usdg.balanceOf(treasury), cut);
+        assertLe(cut, gross[0], "cut <= what came back");
+        assertEq(usdg.balanceOf(address(vault)), SEED_USDG + accrued - cut, "prior idle never skimmed");
+    }
+
+    /// @dev {rebalance}: harvested amounts ARE the fees, so the bound holds by construction — cut = floor(h × bps) <= h.
+    function testFuzz_FeeBound_Rebalance(uint256 fu, uint256 fw, uint16 feeBps) public {
+        fu = bound(fu, 0, 1e30);
+        fw = bound(fw, 0, 1e30);
+        feeBps = uint16(bound(feeBps, 0, 3000));
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(feeBps);
+        a1.simulateFees(_amts(fu, fw));
+
+        vm.prank(keeper);
+        (, uint256[] memory harvested, uint256[] memory cut) = vault.rebalance();
+
+        for (uint256 i; i < 2; ++i) {
+            assertEq(harvested[i], i == 0 ? fu : fw);
+            assertEq(cut[i], Math.mulDiv(harvested[i], feeBps, BPS));
+            assertLe(cut[i], harvested[i], "cut <= harvest");
+            assertEq(_tok(i).balanceOf(treasury), cut[i]);
+        }
+    }
+
+    /// @dev {removeLiquidity}: the collected fees are the base, so cut = floor(fees × bps) <= fees for any fee bps and
+    ///      the vault keeps principal + fees − cut (the mock delivers fixed 11 / 12 principal and 13 / 14 fees).
+    function testFuzz_FeeBound_RemoveLiquidity(uint16 feeBps) public {
+        feeBps = uint16(bound(feeBps, 0, 3000));
+        vm.prank(owner);
+        vault.setPerformanceFeeBps(feeBps);
+        la.setRemoveDelivers(true);
+        uint256[2] memory idleBefore = _bal(address(vault));
+
+        vm.prank(keeper);
+        vault.removeLiquidity(IPositionAdapter(address(la)), ILiquidityAdapter.RemoveLiquidityParams(1, 0, 0));
+
+        uint256[2] memory cut = [Math.mulDiv(13, feeBps, BPS), Math.mulDiv(14, feeBps, BPS)];
+        assertLe(cut[0], 13);
+        assertLe(cut[1], 14);
+        assertEq(usdg.balanceOf(treasury), cut[0]);
+        assertEq(weth.balanceOf(treasury), cut[1]);
+        assertEq(usdg.balanceOf(address(vault)), idleBefore[0] + 11 + 13 - cut[0]);
+        assertEq(weth.balanceOf(address(vault)), idleBefore[1] + 12 + 14 - cut[1]);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+          FEE ORDER (issue #3): HARVEST-FIRST == EXIT-FIRST
+    //////////////////////////////////////////////////////////////*/
+
+    // Each scenario runs on fresh twin vaults over {ProRataFeeAdapter}, whose fee slice is the production adapters'
+    // `floor(feeBalance * sharesWad / 1e18)`, so harvest and exit report the same fees.
+
+    /// @dev Issue example: 100 principal + 100 fees, 15% fee, the attacker holds half. Harvest first pays the treasury
+    ///      15 (7.5 attributable to the half); redeem first pays 7.5. The attacker receives 92.5 either way.
+    function test_FeeOrder_IssueExample_RedeemVsHarvestAttributableFeeMatches() public {
+        World memory a = _world(ORDER_FEE_BPS);
+        World memory b = _world(ORDER_FEE_BPS);
+        _seedPosition(a, 100e18, 100e18, 100e18, 100e18);
+        _seedPosition(b, 100e18, 100e18, 100e18, 100e18);
+        _giveHalf(a);
+        _giveHalf(b);
+
+        vm.prank(keeper);
+        a.vault.rebalance();
+        uint256 harvestCut0 = a.t0.balanceOf(treasury);
+        vm.prank(attacker);
+        a.vault.redeem(GENESIS / 2, attacker);
+        vm.prank(attacker);
+        b.vault.redeem(GENESIS / 2, attacker);
+
+        assertEq(harvestCut0, 15e18, "harvest charges the whole fee");
+        assertEq(b.t0.balanceOf(treasury), 7.5e18, "redeem-first charges the exiting slice");
+        assertEq(b.t1.balanceOf(treasury), a.t1.balanceOf(treasury) / 2);
+        assertEq(a.t0.balanceOf(attacker), b.t0.balanceOf(attacker), "receiver token0");
+        assertEq(a.t1.balanceOf(attacker), b.t1.balanceOf(attacker), "receiver token1");
+        assertEq(a.t0.balanceOf(attacker), 92.5e18);
+    }
+
+    /// @dev A 100% redemption charges the same treasury amount in either order (15% of 80e18 / 40e18).
+    function test_FeeOrder_FullRedeemTreasuryIdenticalEitherOrder() public {
+        World memory a = _world(ORDER_FEE_BPS);
+        World memory b = _world(ORDER_FEE_BPS);
+        _seedPosition(a, 100e18, 80e18, 100e18, 40e18);
+        _seedPosition(b, 100e18, 80e18, 100e18, 40e18);
+
+        vm.prank(keeper);
+        a.vault.rebalance();
+        vm.prank(owner);
+        a.vault.redeem(GENESIS, owner);
+        vm.prank(owner);
+        b.vault.redeem(GENESIS, owner);
+
+        assertEq(a.t0.balanceOf(treasury), 12e18);
+        assertEq(a.t1.balanceOf(treasury), 6e18);
+        assertEq(b.t0.balanceOf(treasury), a.t0.balanceOf(treasury), "full exit token0");
+        assertEq(b.t1.balanceOf(treasury), a.t1.balanceOf(treasury), "full exit token1");
+        assertEq(a.t0.balanceOf(owner), b.t0.balanceOf(owner));
+        assertEq(a.t1.balanceOf(owner), b.t1.balanceOf(owner));
+    }
+
+    /// @dev `pullFrom(10_000)` and a positive `removeLiquidity` realize the whole fee balance, like a harvest;
+    ///      `pullFrom(5_000)` half of it.
+    function test_FeeOrder_PullFromAndRemoveLiquidityMatchHarvest() public {
+        World memory harvested = _world(ORDER_FEE_BPS);
+        World memory pulledAll = _world(ORDER_FEE_BPS);
+        World memory pulledHalf = _world(ORDER_FEE_BPS);
+        World memory removed = _world(ORDER_FEE_BPS);
+        _seedPosition(harvested, 100e18, 100e18, 100e18, 70e18);
+        _seedPosition(pulledAll, 100e18, 100e18, 100e18, 70e18);
+        _seedPosition(pulledHalf, 100e18, 100e18, 100e18, 70e18);
+        _seedPosition(removed, 100e18, 100e18, 100e18, 70e18);
+
+        vm.startPrank(keeper);
+        harvested.vault.rebalance();
+        pulledAll.vault.pullFrom(IPositionAdapter(address(pulledAll.adapter)), 10_000);
+        pulledHalf.vault.pullFrom(IPositionAdapter(address(pulledHalf.adapter)), 5_000);
+        removed.vault
+            .removeLiquidity(
+                IPositionAdapter(address(removed.adapter)),
+                ILiquidityAdapter.RemoveLiquidityParams({liquidity: 1, minPrincipal0: 0, minPrincipal1: 0})
+            );
+        vm.stopPrank();
+
+        for (uint256 i; i < 2; ++i) {
+            uint256 h = (i == 0 ? harvested.t0 : harvested.t1).balanceOf(treasury);
+            assertEq((i == 0 ? pulledAll.t0 : pulledAll.t1).balanceOf(treasury), h, "pullFrom(10_000) == harvest");
+            assertEq((i == 0 ? pulledHalf.t0 : pulledHalf.t1).balanceOf(treasury), h / 2, "pullFrom(5_000) == half");
+            assertEq((i == 0 ? removed.t0 : removed.t1).balanceOf(treasury), h, "removeLiquidity == harvest");
+        }
+        assertEq(removed.t0.balanceOf(address(removed.vault)), 200e18 - harvested.t0.balanceOf(treasury));
+    }
+
+    /// @dev Any principal / fees / fee bps / redeemed fraction: the redeem-first cut is within 1 wei of the share of a
+    ///      harvest-first cut attributable to the redeemed shares, `floor(harvestCut * shares / supply)`.
+    function testFuzz_FeeOrder_PartialRedeemAttributableFeeWithinOneWei(
+        uint128 principal0,
+        uint128 fee0,
+        uint128 principal1,
+        uint128 fee1,
+        uint16 bps,
+        uint256 shareBps
+    ) public {
+        principal0 = uint128(bound(principal0, 0, 1e24));
+        fee0 = uint128(bound(fee0, 0, 1e24));
+        principal1 = uint128(bound(principal1, 0, 1e24));
+        fee1 = uint128(bound(fee1, 0, 1e24));
+        bps = uint16(bound(bps, 0, 3000));
+        shareBps = bound(shareBps, 1, BPS);
+        uint256 shares = GENESIS * shareBps / BPS;
+
+        World memory harvested = _world(bps);
+        World memory redeemed = _world(bps);
+        _seedPosition(harvested, principal0, fee0, principal1, fee1);
+        _seedPosition(redeemed, principal0, fee0, principal1, fee1);
+
+        vm.prank(keeper);
+        harvested.vault.rebalance();
+        vm.prank(owner);
+        redeemed.vault.redeem(shares, owner);
+
+        uint256 h0 = harvested.t0.balanceOf(treasury);
+        uint256 h1 = harvested.t1.balanceOf(treasury);
+        assertApproxEqAbs(redeemed.t0.balanceOf(treasury), h0 * shares / GENESIS, 1, "token0 attributable");
+        assertApproxEqAbs(redeemed.t1.balanceOf(treasury), h1 * shares / GENESIS, 1, "token1 attributable");
+    }
+
+    /*//////////////////////////////////////////////////////////////
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
+
+    /// @dev A fresh vault over one {ProRataFeeAdapter} (fee-order scenarios).
+    function _world(uint16 bps) internal returns (World memory w) {
+        w.t0 = new MockToken("T0", "T0", 18);
+        w.t1 = new MockToken("T1", "T1", 18);
+        address[] memory b = new address[](2);
+        b[0] = address(w.t0);
+        b[1] = address(w.t1);
+        MySunVaultUpgradeable impl = new MySunVaultUpgradeable(VaultImplArgs.depositSplit());
+        w.vault = MySunVaultUpgradeable(
+            address(
+                new ERC1967Proxy(
+                    address(impl),
+                    abi.encodeCall(
+                        MySunVaultUpgradeable(address(0)).initialize,
+                        (owner, "sunLP", "sunLP", b, treasury, bps, GENESIS, uint256(0))
+                    )
+                )
+            )
+        );
+        w.adapter = new ProRataFeeAdapter(address(w.vault), w.t0, w.t1);
+        vm.startPrank(owner);
+        w.vault.addAdapter(IPositionAdapter(address(w.adapter)));
+        w.vault.setKeeper(keeper, true);
+        vm.stopPrank();
+    }
+
+    /// @dev Genesis deposit of the principal (a zero principal is seeded as 1 wei so genesis pulls a non-zero basket),
+    ///      all of it deployed to the adapter, then `f0/f1` fees accrued there.
+    function _seedPosition(World memory w, uint256 p0, uint256 f0, uint256 p1, uint256 f1) internal {
+        uint256[] memory dep = _amts(p0 == 0 ? 1 : p0, p1 == 0 ? 1 : p1);
+        w.t0.mint(owner, dep[0]);
+        w.t1.mint(owner, dep[1]);
+        address[] memory b = new address[](2);
+        b[0] = address(w.t0);
+        b[1] = address(w.t1);
+        vm.startPrank(owner);
+        w.t0.approve(address(w.vault), dep[0]);
+        w.t1.approve(address(w.vault), dep[1]);
+        w.vault.deposit(b, dep, GENESIS, owner);
+        vm.stopPrank();
+        vm.prank(keeper);
+        w.vault.deployTo(IPositionAdapter(address(w.adapter)), dep);
+        w.adapter.accrue(f0, f1);
+    }
+
+    function _giveHalf(World memory w) internal {
+        vm.prank(owner);
+        w.vault.transfer(attacker, GENESIS / 2);
+    }
 
     function _deploy(MockPositionAdapter a, uint256 u, uint256 w) internal {
         vm.prank(keeper);

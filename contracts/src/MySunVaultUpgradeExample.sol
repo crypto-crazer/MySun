@@ -14,6 +14,7 @@ import {MySunVaultUpgradeable} from "contracts/MySunVaultUpgradeable.sol";
  *      its OWN namespace, so there is zero possibility of layout collision. A custom annotation
  *      below records the upgrade source for the OZ plugin validator.
  * @custom:oz-upgrades-from MySunVaultUpgradeable
+ * @custom:oz-upgrades-unsafe-allow external-library-linking
  * @custom:security-contact security@mysun.example
  */
 contract MySunVaultUpgradeExample is MySunVaultUpgradeable {
