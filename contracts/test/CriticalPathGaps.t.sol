@@ -174,7 +174,7 @@ contract CriticalPathGapsTest is Test {
         vault.redeem(minted, bob);
         _assertAllBlockedByGuard(token);
         assertEq(vault.balanceOf(bob), 0);
-        assertGt(token.balanceOf(bob), 0, "bob was paid out");
+        assertEq(token.balanceOf(bob), 100e18, "bob got his principal back");
     }
 
     function _assertAllBlockedByGuard(ReenteringToken token) internal view {
@@ -279,6 +279,7 @@ contract CriticalPathGapsTest is Test {
     //////////////////////////////////////////////////////////////*/
 
     /// @dev KNOWN ISSUE: over-reported adapter fees (fees[i] > amounts[i] unchecked in `redeem`).
+    ///      Tracked in https://github.com/crypto-crazer/MySun/pull/10; flip this pin when that lands.
     ///      THIS TEST PINS CURRENT BUGGY BEHAVIOUR AS EXPECTED. Once `redeem` validates the adapter's fee
     ///      report, flip the assertions below: the phantom case should revert (or pay no cut) and the
     ///      brick case should revert with a typed fee-report error instead of `ERC20InsufficientBalance`.
@@ -312,7 +313,8 @@ contract CriticalPathGapsTest is Test {
         assertEq(token.balanceOf(treasury), 100e18, "phantom fee taken from idle");
         assertEq(sent[0], 900e18, "redeemer paid the cut out of principal");
 
-        // Fresh vault: a huge fee report underflows the payout and reverts the whole redeem.
+        // Fresh vault: a huge fee report makes the treasury cut exceed the vault's idle balance, so the
+        // transfer reverts with ERC20InsufficientBalance and the whole redeem fails.
         MySunVaultUpgradeable vault2 = _vault(basket, owner, treasury, 100e18, 1_000);
         OverReportingAdapter adapter2 = new OverReportingAdapter(address(vault2), address(token));
         vm.prank(owner);
@@ -338,6 +340,7 @@ contract CriticalPathGapsTest is Test {
     }
 
     /// @dev KNOWN ISSUE: `redeem` has no per-token minimum-out (no slippage protection on exit).
+    ///      Tracked in https://github.com/crypto-crazer/MySun/pull/10; flip this pin when that lands.
     ///      THIS TEST PINS CURRENT BUGGY BEHAVIOUR AS EXPECTED. Once `redeem` gains a min-amounts guard
     ///      (or equivalent), flip it to expect a revert on the 1% delivery.
     ///
