@@ -285,6 +285,34 @@ Receipt tokens 為 ERC-20、18 decimals；每個 vault 的 name／symbol 在初�
 | Swap Executor (ERC-20, UniversalRouter) | `0x413a67ca4E83A4782F7745858979fE059ccbB431` |
 | Native Swap Executor (v4 native) | `0x58452cf80a0819a75a3b94347f706280ccc03d04` |
 
+## Vault implementation 外部函式庫：PoolmigoVaultCold
+
+自 PR #10（`aed498c` 起）vault implementation（`PoolmigoVaultUpgradeable` / `MySunVaultUpgradeable`）連結（link）
+外部函式庫 `PoolmigoVaultCold`（adapter registry 寫入、deposit quote、basket totals、redeem preview；經
+DELEGATECALL 執行，無自身 state、無權限）。implementation 的 bytecode 內嵌此函式庫地址，因此**每個 implementation
+build 都必須記錄它連結的函式庫地址**，升級後一併核對。
+
+| Artifact | Address | 核對 |
+|---|---|---|
+| PoolmigoVaultCold（PR #10 implementation 所連結） | `<TBD — 部署後填入>` | `cast code <addr>` 非空，且等於本 build 的 artifact（見下） |
+| 以此連結的 vault implementation | `<TBD — 部署後填入>` | EIP-1967 implementation slot（每個 proxy 升級後） |
+
+部署流程（明確部署函式庫，不依賴自動 CREATE2）：
+
+1. 部署函式庫一次：`forge create src/PoolmigoVaultCold.sol:PoolmigoVaultCold --rpc-url <rpc> --account <keystore> --broadcast`，
+   將地址填入上表。
+2. 每個部署／升級 vault implementation 的 script 都加上
+   `--libraries src/PoolmigoVaultCold.sol:PoolmigoVaultCold:<上表地址>`；Forge 只做連結，不再部署函式庫。
+3. 所有這類 script 都繼承 `script/VaultColdLink.sol`：script 開始時檢查連結地址上的 runtime code 等於本 build 的
+   `PoolmigoVaultCold`（artifact 中 call-protection 的 `PUSH20` 位置補上該地址後比對）。地址錯誤、來自其他 build 的
+   函式庫，或該地址沒有 code，都會在任何 broadcast 之前 revert。
+
+若未傳 `--libraries`，Forge 會自行透過預設 deterministic deployer
+`0x4e59b44847b379578588920cA78FbF26c0B4956C` 以 CREATE2 部署函式庫。2026-11-02 以唯讀 `cast code` 核對：該
+deployer 在 chain `4663` 存在（69 bytes，標準 Arachnid proxy，code keccak
+`0x2fa86add0aed31f33a762c9d88e807c475bd51d0f52bd0955754b2608f7e4989`）。這條路可用，但 production 一律走上面
+的明確流程，地址才會事先記錄、可核對。
+
 ## Venue & infrastructure
 
 | Artifact | Address / ID |

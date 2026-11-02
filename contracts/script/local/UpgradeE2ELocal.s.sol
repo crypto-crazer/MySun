@@ -7,19 +7,22 @@ import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.s
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {MySunVaultUpgradeable} from "contracts/MySunVaultUpgradeable.sol";
+import {PoolmigoVaultCold} from "contracts/PoolmigoVaultCold.sol";
 import {DepositSplit} from "contracts/periphery/DepositSplit.sol";
 import {IPositionAdapter} from "contracts/interfaces/IPositionAdapter.sol";
 import {ILiquidityAdapter} from "contracts/interfaces/ILiquidityAdapter.sol";
 import {ISwapAdapter} from "contracts/interfaces/ISwapAdapter.sol";
 import {MockToken} from "test/mocks/MockToken.sol";
 import {MockPullingAdapter} from "test/mocks/MockPullingAdapter.sol";
+import {VaultColdLink} from "../VaultColdLink.sol";
 
 /**
  * @notice PR #10 local merge gate — ANVIL ONLY (reverts on any chain id but 31337).
  *         1. Deploys the MAIN (`2736e67`) vault implementation from its build artifact behind an ERC1967 proxy, with
  *            mock tokens and a {MockPullingAdapter}, and seeds state (genesis deposit + a keeper deploy).
- *         2. Deploys this tree's implementation (Forge deploys and links {PoolmigoVaultCold} first) and upgrades the
- *            proxy through UUPS `upgradeToAndCall`, then checks every piece of seeded state survived.
+ *         2. Deploys this tree's implementation, linked to the {PoolmigoVaultCold} passed with `--libraries` (the
+ *            production flow, docs/DEPLOYMENTS.md; {VaultColdLink} checks it is this build's library), and upgrades
+ *            the proxy through UUPS `upgradeToAndCall`, then checks every piece of seeded state survived.
  *         3. Runs deposit, addLiquidity / removeLiquidity, rebalance (fee skim), swapExactIn and redeem end to end.
  *
  * Usage (from contracts/):
@@ -28,12 +31,14 @@ import {MockPullingAdapter} from "test/mocks/MockPullingAdapter.sol";
  *   # the main implementation's artifact, built from a `2736e67` checkout with the same compiler settings:
  *   cp <main checkout>/contracts/out/MySunVaultUpgradeable.sol/MySunVaultUpgradeable.json \
  *      cache/main-2736e67-MySunVaultUpgradeable.json
+ *   forge create src/PoolmigoVaultCold.sol:PoolmigoVaultCold --rpc-url http://127.0.0.1:8547 --broadcast \
+ *     --private-key <anvil #0>                       # -> COLD
  *   forge script script/local/UpgradeE2ELocal.s.sol --rpc-url http://127.0.0.1:8547 --broadcast \
- *     --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+ *     --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --libraries src/PoolmigoVaultCold.sol:PoolmigoVaultCold:<COLD>
  *
  * The keys below are anvil's public, well-known dev keys — LOCAL ONLY, never fund them anywhere.
  */
-contract UpgradeE2ELocal is Script {
+contract UpgradeE2ELocal is Script, VaultColdLink {
     uint256 internal constant OWNER_KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80; // #0
     uint256 internal constant KEEPER_KEY = 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d; // #1
     uint256 internal constant USER_KEY = 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a; // #2
@@ -122,6 +127,7 @@ contract UpgradeE2ELocal is Script {
         address implNow = address(uint160(uint256(vm.load(address(vault), ERC1967Utils.IMPLEMENTATION_SLOT))));
         require(implNow == address(newImpl), "implementation slot");
         console2.log("PR implementation:", address(newImpl));
+        console2.log("linked PoolmigoVaultCold:", address(PoolmigoVaultCold));
         Snap memory upgraded = _snap();
         _logSnap("after upgrade", upgraded);
         _requireSame(before, upgraded);
