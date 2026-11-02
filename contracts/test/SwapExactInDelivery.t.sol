@@ -20,6 +20,7 @@ import {V4StateReader} from "contracts/adapters/uniswap/v4/V4StateReader.sol";
 import {UniversalRouterSwapExecutor} from "contracts/swap/UniversalRouterSwapExecutor.sol";
 import {MockToken} from "test/mocks/MockToken.sol";
 import {MockDeliveryToken} from "test/mocks/MockDeliveryToken.sol";
+import {MockSwapAdapter} from "test/mocks/MockSwapAdapter.sol";
 import {MockV3Factory, MockV3Pool} from "test/mocks/MockV3Pool.sol";
 import {MockPermit2Router} from "test/mocks/MockPermit2Router.sol";
 import {MockV4FeeVenue} from "test/AdapterFees.t.sol";
@@ -188,20 +189,30 @@ contract SwapExactInDeliveryTest is Test {
         assertEq(feeToken.balanceOf(address(vault)), SEED + received);
     }
 
-    /// @dev `tokenIn` re-enters the vault from its transfer hook (here: `redeem`, which would move the vault's balances
-    ///      between the snapshots). The shared lock rejects it and the whole swap reverts.
+    /// @dev `tokenIn` re-enters the vault from its transfer hook with a second keeper swap through another adapter, which
+    ///      would move the vault's `tokenOut` balance between the outer swap's snapshots. The inner call never touches
+    ///      the V3 adapter (whose own lock would hide the vault's), so only the vault's lock can reject it.
     function test_ReentrantTokenIn_Rejected() public {
-        vm.prank(owner);
-        vault.transfer(address(feeToken), 1e18);
+        address[] memory basket = vault.tokens();
+        MockSwapAdapter second = new MockSwapAdapter(basket, address(vault), keccak256("SECOND"), bytes32(uint256(2)));
+        vm.startPrank(owner);
+        vault.addAdapter(IPositionAdapter(address(second)));
+        vault.setKeeper(address(feeToken), true);
+        vm.stopPrank();
         feeToken.setReenter(
-            address(vault), address(vault), abi.encodeCall(vault.redeem, (1e18, address(feeToken)))
+            address(vault),
+            address(vault),
+            abi.encodeCall(
+                vault.swapExactIn, (IPositionAdapter(address(second)), _swap(address(other), address(feeToken), 1))
+            )
         );
 
         vm.prank(keeper);
         vm.expectRevert(ReentrancyGuardTransientUpgradeable.ReentrancyGuardReentrantCall.selector);
-        vault.swapExactIn(IPositionAdapter(address(v3)), _swap(address(feeToken), address(other), 1));
+        vault.swapExactIn(IPositionAdapter(address(v3)), _swap(address(feeToken), address(other), AMOUNT_IN));
 
-        assertEq(vault.balanceOf(address(feeToken)), 1e18, "no redemption happened");
+        assertEq(second.swapCalls(), 0, "inner swap never ran");
+        assertEq(other.balanceOf(address(vault)), SEED);
         assertEq(feeToken.balanceOf(address(v3)), RESERVED);
     }
 
